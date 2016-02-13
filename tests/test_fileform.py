@@ -16,3 +16,13 @@ def test_findheader_found():
         assert firstheader.siginfo == 0xDEADBEEF
         assert firstheader.magics == b'NullsoftInst'
         assert firstheader.c_size < firstheader.u_size
+
+def test_extract_header():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example1.exe'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+        assert header is not None
+        assert len(header.blocks) == fileform.BLOCKS_COUNT
+        assert len(header.install_types) == 33
+
