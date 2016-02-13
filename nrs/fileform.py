@@ -3,7 +3,7 @@ import zlib
 from collections import namedtuple
 class FirstHeader(
         namedtuple('FirstHeader', 'flags siginfo magics '
-            'header_size data_size')):
+            'u_size c_size')):
     header_offset = 0
     data_offset = 0
 
@@ -84,7 +84,7 @@ def _extract_header(nsis_file, firstheader):
     else:
         inflated_data = nsis_file.read(data_size)
 
-    assert(len(inflated_data) == firstheader.header_size)
+    assert(len(inflated_data) == firstheader.u_size)
 
     return Header._make(_header_pack.unpack_from(inflated_data))
 
