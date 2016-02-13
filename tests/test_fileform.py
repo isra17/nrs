@@ -26,3 +26,15 @@ def test_extract_header():
         assert len(header.blocks) == fileform.BLOCKS_COUNT
         assert len(header.install_types) == 33
 
+def test_extract_blocks():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example1.exe'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+
+        for block_id in [fileform.NB_PAGES, fileform.NB_SECTIONS,
+                fileform.NB_ENTRIES, fileform.NB_STRINGS,
+                fileform.NB_LANGTABLES, fileform.NB_CTLCOLORS]:
+            pages_block = fileform._extract_block(nsis_file, firstheader, block_id)
+            assert pages_block is not None
+

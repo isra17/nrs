@@ -96,6 +96,8 @@ def _extract_header(nsis_file, firstheader):
 
     header = Header._make(_header_pack.unpack_from(inflated_data))
     firstheader.header = header
+    firstheader.raw_header = inflated_data
+    firstheader.raw_header_c_size = data_size
 
     # Parse the block headers.
     block_headers = []
@@ -112,6 +114,15 @@ def _extract_header(nsis_file, firstheader):
                 for i in range(0, len(header.raw_install_types), 4)]
 
     return header
+
+def _extract_block(nsis_file, firstheader, block_id):
+    header = firstheader.header
+    if block_id == NB_DATA:
+        nsis_file.seek(firstheader.data_offset + firstheader.raw_header_c_size)
+        return nsis_file.read()
+
+    return firstheader.raw_header[header.blocks[block_id].offset:]
+
 
 if __name__ == '__main__':
     import sys
