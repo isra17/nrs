@@ -9,14 +9,17 @@ class HeaderNotFound(Exception):
     pass
 
 class NSIS:
-    # Create a new NSIS instance given an NSIS installer located at |path|.
+    #
     def __init__(self, path):
+        """
+        Create a new NSIS instance given an NSIS installer located at |path|.
+        """
         self.path = path
         if not self._parse(path):
             raise HeaderNotFound()
 
-    # Lookup for the NSIS version of the NSIS installer.
     def get_version(self):
+        """ Lookup for the NSIS version of the NSIS installer. """
         pe = self._pe()
         if hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE'):
             manifest_entries = [
