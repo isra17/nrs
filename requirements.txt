@@ -1,0 +1,1 @@
+-e git+https://github.com/esnesenon/pefile.git#egg=pefile
