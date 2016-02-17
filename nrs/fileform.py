@@ -270,7 +270,7 @@ def _extract_header(nsis_file, firstheader):
 
     # Parse the install types.
     header.install_types = [
-            struct.unpack_from('<I', header.raw_install_types[i:])
+            struct.unpack_from('<I', header.raw_install_types[i:])[0]
                 for i in range(0, len(header.raw_install_types), 4)]
 
     return header
