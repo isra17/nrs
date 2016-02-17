@@ -2,6 +2,9 @@ import pefile
 import re
 from . import fileform
 
+from .fileform import NB_BGFONT, NB_DATA, NB_PAGES, NB_ENTRIES, NB_ENTRIES, \
+                      NB_STRINGS, NB_SECTIONS, NB_CTLCOLORS, NB_LANGTABLES
+
 def _flatten(l):
     return [i for sl in l for i in sl]
 
@@ -39,12 +42,23 @@ class NSIS:
             for entry in manifest_entries:
                 for data in get_entry_datas(entry):
                     string = pe.get_data(data.struct.OffsetToData,
-                                         data.struct.Size)
+                                         data.struct.Size).decode()
                     match = version_regex.search(string)
                     if match:
                         return match.group(1)
 
+    def get_string(self, address):
+        """ Returns an NSIS expanded string given its |address|. """
+        string = ''
+        for c in self.block(NB_STRINGS)[address:]:
+            if c == 0:
+                break
+            string += chr(c)
+        return string
 
+    def block(self, n):
+        """ Return a block data given a NB_* enum |n| value. """
+        return self._firstheader.raw_header[self._header.blocks[n].offset:]
 
     # Lazilly load a PE instance from the NSIS installer.
     def _pe(self):

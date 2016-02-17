@@ -38,18 +38,27 @@ BLOCK_NAMES = [
 def print_header(header, indent=0):
     print('\t'*indent + header)
 
+def format_key(key, indent=0):
+    return '\t'*(indent+1) + '{:<15}' .format(key + ': ')
+
+
 def print_property(key, value, indent=0):
-    key_fmt = '\t'*(indent+1) + '{:<15}' .format(key + ': ')
     if isinstance(value, int):
-        print('{}0x{:08x}'.format(key_fmt, value))
+        print(format_key(key, indent) + '0x{:08x}'.format(value))
     else:
-        print('{}{}'.format(key_fmt, value))
+        print(format_key(key, indent) + value)
 
 def print_property_flag(key, value, flags_set, indent=0):
-    key_fmt = '\t'*(indent*1) + '{:<15}' .format(key + ': ')
     flags = ' | '.join([flag for flag in flags_set
                 if value & eval(flag, fileform.__dict__)])
-    print('{}0x{:08x} ( {} )'.format(key_fmt, value, flags))
+    print(format_key(key, indent) + '0x{:08x} ( {} )'.format(value, flags))
+
+def print_property_string(key, value, nsis, indent=0):
+    if value != 0xffffffff:
+        string = nsis.get_string(value)
+        print(format_key(key, indent) + '{!r} @ 0x{:08x}'.format(string, value))
+    else:
+        print_property(key, "''")
 
 def dump_all(path):
     try:
@@ -72,7 +81,7 @@ def dump_all(path):
                 .format(nsis._firstheader.header_offset))
         print_property_flag('Flags', nsis._firstheader.flags, FH_FLAGS)
         print_property('Siginfo', nsis._firstheader.siginfo)
-        print_property('Magics', nsis._firstheader.magics)
+        print_property('Magics', nsis._firstheader.magics.decode())
         print_property('Header Size', nsis._firstheader.c_size)
         print_property('Inflated Size', nsis._firstheader.u_size)
 
@@ -112,12 +121,13 @@ def dump_all(path):
         for i, t in enumerate(header.install_types):
             if t:
                 print_property('install_types[{}]'.format(i), t, indent=1)
-        print_property('install_directory_ptr', header.install_directory_ptr)
-        print_property('install_directory_auto_append',
-                header.install_directory_auto_append)
-        print_property('str_uninstchild', header.str_uninstchild)
-        print_property('str_uninstcmd', header.str_uninstcmd)
-        print_property('str_wininit', header.str_wininit)
+        print_property_string('install_directory_ptr',
+                header.install_directory_ptr, nsis)
+        print_property_string('install_directory_auto_append',
+                header.install_directory_auto_append, nsis)
+        print_property_string('str_uninstchild', header.str_uninstchild, nsis)
+        print_property_string('str_uninstcmd', header.str_uninstcmd, nsis)
+        print_property_string('str_wininit', header.str_wininit, nsis)
 
     except HeaderNotFound:
         sys.stderr.write('Error: Target it not an NSIS installer.' + os.linesep)
