@@ -187,21 +187,22 @@ class Entry(namedtuple('Entry', [
     offsets = []
 
 
-Page = namedtuple('Page', [
-        'dlg_id', # Dialog resource ID.
-        'wndproc_id',
-        #ifdef NSIS_SUPPORT_CODECALLBACKS
-            'prefunc', # Called before the page is created.
-            'showfunc', # Called right before the page is shown.
-            'leavefunc', # Called when the user leaves the page.
-        'flags',
-        'caption',
-        'back',
-        'next',
-        'clicknext',
-        'cancel',
-        'params'
-    ])
+class Page(namedtuple('Page', [
+            'dlg_id', # Dialog resource ID.
+            'wndproc_id',
+            #ifdef NSIS_SUPPORT_CODECALLBACKS
+                'prefunc', # Called before the page is created.
+                'showfunc', # Called right before the page is shown.
+                'leavefunc', # Called when the user leaves the page.
+            'flags',
+            'caption',
+            'back',
+            'next',
+            'clicknext',
+            'cancel',
+            'raw_params'
+        ])):
+    params = []
 
 CtlColors32 = namedtuple('CtlColors32', [
         'text',
@@ -302,6 +303,19 @@ def _parse_entries(block, n):
         entries.append(entry)
 
     return entries
+
+def _parse_pages(block, n):
+    bsize = _page_pack.size
+    pages = []
+    for i in range(n):
+        page = Page._make(_page_pack.unpack_from(block[i * bsize:]))
+        # Parse the install types.
+        page.params = [
+            struct.unpack_from('<I', page.raw_params[j:])[0]
+                for j in range(0, len(page.raw_params), 4)]
+        pages.append(page)
+
+    return pages
 
 if __name__ == '__main__':
     import sys

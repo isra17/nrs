@@ -57,6 +57,9 @@ def format_key(key, indent=0):
 def print_property(key, value, indent=0):
     if isinstance(value, int):
         print(format_key(key, indent) + '0x{:08x}'.format(value))
+    elif isinstance(value, list):
+        print(format_key(key, indent) +
+                '[' + ', '.join(hex(x) for x in value) + ']')
     else:
         print(format_key(key, indent) + value)
 
@@ -149,6 +152,24 @@ def dump_all(path):
         print_header('Strings')
         for string in nsis.get_all_strings():
             print_string(string, indent=1)
+
+        # Dump installer page.
+        print()
+        print_header('Pages')
+        for i, page in enumerate(nsis.pages):
+            print_header('Section[{}]' .format(i), indent=1)
+            print_property('dlg_id', page.dlg_id, indent=1)
+            print_property('wndproc_id', page.wndproc_id, indent=1)
+            print_property('prefunc', page.prefunc, indent=1)
+            print_property('showfunc', page.showfunc, indent=1)
+            print_property('leavefunc', page.leavefunc, indent=1)
+            print_property('flags', page.flags, indent=1)
+            print_property('caption', page.caption, indent=1)
+            print_property('back', page.back, indent=1)
+            print_property('next', page.next, indent=1)
+            print_property('clicknext', page.clicknext, indent=1)
+            print_property('cancel', page.cancel, indent=1)
+            print_property('params', page.params, indent=1)
 
         # Dump installer entries.
         print()

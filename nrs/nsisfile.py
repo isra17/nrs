@@ -101,6 +101,11 @@ class NSIS:
             return False
 
         self._header = fileform._extract_header(self._fd, self._firstheader)
+
+        self.pages = fileform._parse_pages(
+                self.block(NB_PAGES),
+                self._header.blocks[NB_PAGES].num)
+
         self.sections = fileform._parse_sections(
                 self.block(NB_SECTIONS),
                 self._header.blocks[NB_SECTIONS].num)
