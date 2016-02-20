@@ -180,10 +180,12 @@ Section = namedtuple('Section', [
         'name' # Empty for invisible sections.
     ])
 
-Entry = namedtuple('Entry', [
-        'which', # EW_* enum.
-        'offset', # Meaning depends on |which|.
-    ])
+class Entry(namedtuple('Entry', [
+            'which', # EW_* enum.
+            'raw_offsets', # Meaning depends on |which|.
+        ])):
+    offsets = []
+
 
 Page = namedtuple('Page', [
         'dlg_id', # Dialog resource ID.
@@ -287,6 +289,19 @@ def _parse_sections(block, n):
     bsize = _section_pack.size
     return [Section._make(_section_pack.unpack_from(block[i * bsize:]))
                 for i in range(n)]
+
+def _parse_entries(block, n):
+    bsize = _entry_pack.size
+    entries = []
+    for i in range(n):
+        entry = Entry._make(_entry_pack.unpack_from(block[i * bsize:]))
+        # Parse the install types.
+        entry.offsets = [
+            struct.unpack_from('<I', entry.raw_offsets[j:])[0]
+                for j in range(0, len(entry.raw_offsets), 4)]
+        entries.append(entry)
+
+    return entries
 
 if __name__ == '__main__':
     import sys

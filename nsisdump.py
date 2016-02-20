@@ -150,6 +150,11 @@ def dump_all(path):
         for string in nsis.get_all_strings():
             print_string(string, indent=1)
 
+        # Dump installer entries.
+        print()
+        print_header('Entries')
+        print_property('size', len(nsis.entries))
+
         # Dump installer sections.
         print()
         print_header('Sections')

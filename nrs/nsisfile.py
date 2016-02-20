@@ -104,4 +104,8 @@ class NSIS:
         self.sections = fileform._parse_sections(
                 self.block(NB_SECTIONS),
                 self._header.blocks[NB_SECTIONS].num)
+
+        self.entries = fileform._parse_entries(
+                self.block(NB_ENTRIES),
+                self._header.blocks[NB_ENTRIES].num)
         return True
