@@ -283,6 +283,10 @@ def _extract_block(nsis_file, firstheader, block_id):
 
     return firstheader.raw_header[header.blocks[block_id].offset:]
 
+def _parse_sections(block, n):
+    bsize = _section_pack.size
+    return [Section._make(_section_pack.unpack_from(block[i * bsize:]))
+                for i in range(n)]
 
 if __name__ == '__main__':
     import sys

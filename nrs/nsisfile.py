@@ -12,11 +12,12 @@ class HeaderNotFound(Exception):
     pass
 
 class NSIS:
-    #
+
     def __init__(self, path):
         """
         Create a new NSIS instance given an NSIS installer located at |path|.
         """
+        self._block_cache = {}
         self.path = path
         if not self._parse(path):
             raise HeaderNotFound()
@@ -49,6 +50,10 @@ class NSIS:
 
     def get_string(self, address):
         """ Returns an NSIS expanded string given its |address|. """
+        return self.get_raw_string(address)
+
+    def get_raw_string(self, address):
+        """ Returns a raw NSIS string given its |address|. """
         string = ''
         for c in self.block(NB_STRINGS)[address:]:
             if c == 0:
@@ -56,9 +61,30 @@ class NSIS:
             string += chr(c)
         return string
 
+    def get_all_strings(self):
+        """ Returns all NSIS strings extracted from the strings section. """
+        string_block_size = len(self.block(NB_STRINGS))
+        offset = 0
+        strings = []
+        while offset < string_block_size:
+            string = self.get_raw_string(offset)
+            if string:
+                strings.append(string)
+            offset += len(string) + 1
+
+        return strings
+
     def block(self, n):
         """ Return a block data given a NB_* enum |n| value. """
-        return self._firstheader.raw_header[self._header.blocks[n].offset:]
+        if n not in self._block_cache:
+            start = self._header.blocks[n].offset
+            try:
+                end = next(b.offset for b
+                        in self._header.blocks[n+1:] if b.offset > 0)
+            except StopIteration:
+                end = len(self._header.blocks)
+            self._block_cache[n] = self._firstheader.raw_header[start:end]
+        return self._block_cache[n]
 
     # Lazilly load a PE instance from the NSIS installer.
     def _pe(self):
@@ -75,4 +101,7 @@ class NSIS:
             return False
 
         self._header = fileform._extract_header(self._fd, self._firstheader)
+        self.sections = fileform._parse_sections(
+                self.block(NB_SECTIONS),
+                self._header.blocks[NB_SECTIONS].num)
         return True

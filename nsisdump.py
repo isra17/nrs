@@ -24,6 +24,18 @@ CF_FLAGS = [
     'CH_FLAGS_NO_CUSTOM',
 ]
 
+SF_FLAGS = [
+    'SF_SELECTED',
+    'SF_SECGRP',
+    'SF_SECGRPEND',
+    'SF_BOLD',
+    'SF_RO',
+    'SF_EXPAND',
+    'SF_PSELECTED',
+    'SF_TOGGLED',
+    'SF_NAMECHG',
+]
+
 BLOCK_NAMES = [
     'Pages',
     'Sections',
@@ -59,6 +71,9 @@ def print_property_string(key, value, nsis, indent=0):
         print(format_key(key, indent) + '{!r} @ 0x{:08x}'.format(string, value))
     else:
         print_property(key, "''")
+
+def print_string(value, indent=0):
+    print(('\t'*indent) + repr(value))
 
 def dump_all(path):
     try:
@@ -128,6 +143,27 @@ def dump_all(path):
         print_property_string('str_uninstchild', header.str_uninstchild, nsis)
         print_property_string('str_uninstcmd', header.str_uninstcmd, nsis)
         print_property_string('str_wininit', header.str_wininit, nsis)
+
+        # Dump installer strings.
+        print()
+        print_header('Strings')
+        for string in nsis.get_all_strings():
+            print_string(string, indent=1)
+
+        # Dump installer sections.
+        print()
+        print_header('Sections')
+        for i, section in enumerate(nsis.sections):
+            print_header('Section[{}] - {}'
+                .format(i, nsis.get_string(section.name_ptr)), indent=1)
+            print_property_string('name_ptr', section.name_ptr, nsis, indent=1)
+            print_property('install_types', section.install_types, indent=1)
+            print_property_flag('flags', section.flags, SF_FLAGS, indent=1)
+            print_property('code', section.code, indent=1)
+            print_property('code_size', section.code_size, indent=1)
+            print_property('size_kb', section.size_kb, indent=1)
+            print_property('name', section.name.decode(), indent=1)
+
 
     except HeaderNotFound:
         sys.stderr.write('Error: Target it not an NSIS installer.' + os.linesep)
