@@ -36,6 +36,20 @@ SF_FLAGS = [
     'SF_NAMECHG',
 ]
 
+PF_FLAGS = [
+    'PF_LICENSE_SELECTED',
+    'PF_NEXT_ENABLE',
+    'PF_CANCEL_ENABLE',
+    'PF_BACK_SHOW',
+    'PF_LICENSE_STREAM',
+    'PF_LICENSE_FORCE_SELECTION',
+    'PF_LICENSE_NO_FORCE_SELECTION',
+    'PF_NO_NEXT_FOCUS',
+    'PF_BACK_ENABLE',
+    'PF_PAGE_EX',
+    'PF_DIR_NO_BTN_DISABLE',
+]
+
 BLOCK_NAMES = [
     'Pages',
     'Sections',
@@ -163,7 +177,7 @@ def dump_all(path):
             print_property('prefunc', page.prefunc, indent=1)
             print_property('showfunc', page.showfunc, indent=1)
             print_property('leavefunc', page.leavefunc, indent=1)
-            print_property('flags', page.flags, indent=1)
+            print_property_flag('flags', page.flags, PF_FLAGS, indent=1)
             print_property('caption', page.caption, indent=1)
             print_property('back', page.back, indent=1)
             print_property('next', page.next, indent=1)
