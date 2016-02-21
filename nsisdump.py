@@ -50,6 +50,16 @@ PF_FLAGS = [
     'PF_DIR_NO_BTN_DISABLE',
 ]
 
+PWP_ENUM = [
+    'PWP_LICENSE',
+    'PWP_SELCOM',
+    'PWP_DIR',
+    'PWP_INSTFILES',
+    'PWP_UNINST',
+    'PWP_COMPLETED',
+    'PWP_CUSTOM',
+]
+
 BLOCK_NAMES = [
     'Pages',
     'Sections',
@@ -81,6 +91,12 @@ def print_property_flag(key, value, flags_set, indent=0):
     flags = ' | '.join([flag for flag in flags_set
                 if value & eval(flag, fileform.__dict__)])
     print(format_key(key, indent) + '0x{:08x} ( {} )'.format(value, flags))
+
+def print_property_enum(key, value, enum_set, indent=0):
+    flag = '<unknown>'
+    if value < len(enum_set):
+        flag = enum_set[value]
+    print(format_key(key, indent) + '0x{:08x} ( {} )'.format(value, flag))
 
 def print_property_string(key, value, nsis, indent=0):
     if value != 0xffffffff:
@@ -171,9 +187,9 @@ def dump_all(path):
         print()
         print_header('Pages')
         for i, page in enumerate(nsis.pages):
-            print_header('Section[{}]' .format(i), indent=1)
+            print_header('Page[{}]' .format(i), indent=1)
             print_property('dlg_id', page.dlg_id, indent=1)
-            print_property('wndproc_id', page.wndproc_id, indent=1)
+            print_property_enum('wndproc_id', page.flags, PWP_ENUM, indent=1)
             print_property('prefunc', page.prefunc, indent=1)
             print_property('showfunc', page.showfunc, indent=1)
             print_property('leavefunc', page.leavefunc, indent=1)
