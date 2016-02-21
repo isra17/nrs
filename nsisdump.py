@@ -126,15 +126,15 @@ def dump_all(path):
         # NSIS firstheader.
         print('')
         print_header('FirstHeader @ 0x{:x}'
-                .format(nsis._firstheader.header_offset))
-        print_property_flag('Flags', nsis._firstheader.flags, FH_FLAGS)
-        print_property('Siginfo', nsis._firstheader.siginfo)
-        print_property('Magics', nsis._firstheader.magics.decode())
-        print_property('Header Size', nsis._firstheader.c_size)
-        print_property('Inflated Size', nsis._firstheader.u_size)
+                .format(nsis.firstheader.header_offset))
+        print_property_flag('Flags', nsis.firstheader.flags, FH_FLAGS)
+        print_property('Siginfo', nsis.firstheader.siginfo)
+        print_property('Magics', nsis.firstheader.magics.decode())
+        print_property('Header Size', nsis.firstheader.c_size)
+        print_property('Inflated Size', nsis.firstheader.u_size)
 
         # NSIS inflated header.
-        header = nsis._header
+        header = nsis.header
         print('')
         print_header('Inflated header')
         print_property_flag('Flags', header.flags, CF_FLAGS)

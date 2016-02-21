@@ -259,8 +259,8 @@ def _extract_header(nsis_file, firstheader):
 
     header = Header._make(_header_pack.unpack_from(inflated_data))
     firstheader.header = header
-    firstheader.raw_header = inflated_data
-    firstheader.raw_header_c_size = data_size
+    firstheader._raw_header = inflated_data
+    firstheader._raw_header_c_size = data_size
 
     # Parse the block headers.
     block_headers = []
@@ -281,10 +281,10 @@ def _extract_header(nsis_file, firstheader):
 def _extract_block(nsis_file, firstheader, block_id):
     header = firstheader.header
     if block_id == NB_DATA:
-        nsis_file.seek(firstheader.data_offset + firstheader.raw_header_c_size)
+        nsis_file.seek(firstheader.data_offset + firstheader._raw_header_c_size)
         return nsis_file.read()
 
-    return firstheader.raw_header[header.blocks[block_id].offset:]
+    return firstheader._raw_header[header.blocks[block_id].offset:]
 
 def _parse_sections(block, n):
     bsize = _section_pack.size
@@ -317,9 +317,3 @@ def _parse_pages(block, n):
 
     return pages
 
-if __name__ == '__main__':
-    import sys
-    with open(sys.argv[1], 'rb') as nsis_file:
-        firstheader = _find_firstheader(nsis_file)
-        print(repr(_extract_header(nsis_file, firstheader)))
-        print(repr(firstheader))
