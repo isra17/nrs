@@ -42,6 +42,9 @@ def _nvar_name(nvar):
 def _langcode_name(nlang):
     return '$(LangString{})'.format(nlang).encode()
 
+def _shell_name(param1, param2):
+    return '$__SHELL_{}_{}__'.format(param1, param2).encode()
+
 def decode(block, offset):
     """ Decode special characters found in NSIS strings. """
     string = bytearray()
@@ -63,7 +66,7 @@ def decode(block, offset):
 
             i += 2
             if c == NS_SHELL_CODE:
-                string += b'XXXX'
+                string += _shell_name(param1, param2)
             elif c == NS_VAR_CODE:
                 string += _nvar_name(param)
             elif c == NS_LANG_CODE:
