@@ -1,6 +1,6 @@
 import pefile
 import re
-from . import fileform
+from . import fileform, strings
 
 from .fileform import NB_BGFONT, NB_DATA, NB_PAGES, NB_ENTRIES, NB_ENTRIES, \
                       NB_STRINGS, NB_SECTIONS, NB_CTLCOLORS, NB_LANGTABLES
@@ -69,7 +69,7 @@ class NSIS:
 
     def get_string(self, address):
         """ Returns an NSIS expanded string given its |address|. """
-        return self.get_raw_string(address)
+        return strings.decode(self.block(NB_STRINGS), address)
 
     def get_raw_string(self, address):
         """ Returns a raw NSIS string given its |address|. """
@@ -86,10 +86,10 @@ class NSIS:
         offset = 0
         strings = []
         while offset < string_block_size:
-            string = self.get_raw_string(offset)
+            string, processed = self.get_string(offset)
             if string:
                 strings.append(string)
-            offset += len(string) + 1
+            offset += processed
 
         return strings
 
