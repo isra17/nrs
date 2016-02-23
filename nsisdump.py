@@ -106,7 +106,7 @@ def print_property_string(key, value, nsis, indent=0):
         print_property(key, "''")
 
 def print_string(value, indent=0):
-    print(('\t'*indent) + repr(value))
+    print(('\t'*indent) + '"' + (value) + '"')
 
 def dump_all(path):
     try:
