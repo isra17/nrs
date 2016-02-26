@@ -1,8 +1,0 @@
-machine:
-  python:
-    version: 3.5.0
-
-test:
-  override:
-    - py.test -v
-    - ./nsisdump.py tests/samples/example1.exe
