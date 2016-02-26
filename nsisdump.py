@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from nrs.nsisfile import NSIS, HeaderNotFound
 from nrs import fileform
 import pefile

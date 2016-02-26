@@ -5,3 +5,4 @@ machine:
 test:
   override:
     - py.test -v
+    - ./nsisdump.py tests/samples/example1.exe
