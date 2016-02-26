@@ -7,6 +7,6 @@ install:
   - pip install -e .
 
 script:
-  - py.test
+  - py.test -v
   - ./nsisdump.py tests/samples/example1.exe
 
