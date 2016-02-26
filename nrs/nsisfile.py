@@ -17,6 +17,7 @@ class NSIS:
         Create a new NSIS instance given an NSIS installer located at |path|.
         """
         self._block_cache = {}
+        self._pe = None
 
         self.path = path
         """ Parsed installer path. """
@@ -41,9 +42,15 @@ class NSIS:
         if not self._parse(path):
             raise HeaderNotFound()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     def get_version(self):
         """ Lookup for the NSIS version of the NSIS installer. """
-        pe = self._pe()
+        pe = self._get_pe()
         if hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE'):
             manifest_entries = [
                 d for d in pe.DIRECTORY_ENTRY_RESOURCE.entries
@@ -69,15 +76,15 @@ class NSIS:
 
     def get_string(self, address):
         """ Returns an NSIS expanded string given its |address|. """
-        return strings.decode(self.block(NB_STRINGS), address)
+        return self._parse_string(address)[0]
 
     def get_raw_string(self, address):
         """ Returns a raw NSIS string given its |address|. """
-        string = ''
+        string = bytearray()
         for c in self.block(NB_STRINGS)[address:]:
             if c == 0:
                 break
-            string += chr(c)
+            string.append(c)
         return string
 
     def get_all_strings(self):
@@ -86,7 +93,7 @@ class NSIS:
         offset = 0
         strings = []
         while offset < string_block_size:
-            string, processed = self.get_string(offset)
+            string, processed = self._parse_string(offset)
             if string:
                 strings.append(string)
             offset += processed
@@ -105,31 +112,40 @@ class NSIS:
             self._block_cache[n] = self.firstheader._raw_header[start:end]
         return self._block_cache[n]
 
-    # Lazilly load a PE instance from the NSIS installer.
-    def _pe(self):
-        import pefile
-        if not hasattr(self, '__pe'):
-            self.__pe = pefile.PE(self.path)
+    def close(self):
+        if self._pe is not None:
+            self._pe.close()
 
-        return self.__pe
+    def _parse_string(self, address):
+        """ Returns an NSIS expanded string given its |address|. """
+        return strings.decode(self.block(NB_STRINGS), address)
+
+
+    def _get_pe(self):
+        """ Lazilly load a PE instance from the NSIS installer. """
+        import pefile
+        if self._pe is None:
+            self._pe = pefile.PE(self.path)
+
+        return self._pe
 
     def _parse(self, path):
-        self._fd = open(path, 'rb')
-        self.firstheader = fileform._find_firstheader(self._fd)
-        if self.firstheader is None:
-            return False
+        with open(path, 'rb') as fd:
+            self.firstheader = fileform._find_firstheader(fd)
+            if self.firstheader is None:
+                return False
 
-        self.header = fileform._extract_header(self._fd, self.firstheader)
+            self.header = fileform._extract_header(fd, self.firstheader)
 
-        self.pages = fileform._parse_pages(
-                self.block(NB_PAGES),
-                self.header.blocks[NB_PAGES].num)
+            self.pages = fileform._parse_pages(
+                    self.block(NB_PAGES),
+                    self.header.blocks[NB_PAGES].num)
 
-        self.sections = fileform._parse_sections(
-                self.block(NB_SECTIONS),
-                self.header.blocks[NB_SECTIONS].num)
+            self.sections = fileform._parse_sections(
+                    self.block(NB_SECTIONS),
+                    self.header.blocks[NB_SECTIONS].num)
 
-        self.entries = fileform._parse_entries(
-                self.block(NB_ENTRIES),
-                self.header.blocks[NB_ENTRIES].num)
+            self.entries = fileform._parse_entries(
+                    self.block(NB_ENTRIES),
+                    self.header.blocks[NB_ENTRIES].num)
         return True
