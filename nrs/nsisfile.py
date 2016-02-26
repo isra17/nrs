@@ -1,5 +1,6 @@
 import pefile
 import re
+from builtins import bytes
 from . import fileform, strings
 
 from .fileform import NB_BGFONT, NB_DATA, NB_PAGES, NB_ENTRIES, NB_ENTRIES, \
@@ -50,29 +51,35 @@ class NSIS:
 
     def get_version(self):
         """ Lookup for the NSIS version of the NSIS installer. """
+        version_regex = re.compile(r'Nullsoft Install System v(\w+\.\w+)')
+
+        for string in self.get_all_strings():
+            match = version_regex.search(string)
+            if match:
+                return match.group(1)
+
         pe = self._get_pe()
-        if hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE'):
-            manifest_entries = [
-                d for d in pe.DIRECTORY_ENTRY_RESOURCE.entries
-                    if d.id == pefile.RESOURCE_TYPE['RT_MANIFEST']
-            ]
+        if pe:
+            if hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE'):
+                manifest_entries = [
+                    d for d in pe.DIRECTORY_ENTRY_RESOURCE.entries
+                        if d.id == pefile.RESOURCE_TYPE['RT_MANIFEST']
+                ]
 
-            def get_entry_datas(entry):
-                if hasattr(entry, 'data'):
-                    return [entry.data]
-                else:
-                    return _flatten(get_entry_datas(entry) for entry
-                                        in entry.directory.entries)
+                def get_entry_datas(entry):
+                    if hasattr(entry, 'data'):
+                        return [entry.data]
+                    else:
+                        return _flatten(get_entry_datas(entry) for entry
+                                            in entry.directory.entries)
 
-            version_regex = re.compile(r'Nullsoft Install System v(\w+\.\w+)<')
-
-            for entry in manifest_entries:
-                for data in get_entry_datas(entry):
-                    string = pe.get_data(data.struct.OffsetToData,
-                                         data.struct.Size).decode()
-                    match = version_regex.search(string)
-                    if match:
-                        return match.group(1)
+                for entry in manifest_entries:
+                    for data in get_entry_datas(entry):
+                        string = pe.get_data(data.struct.OffsetToData,
+                                             data.struct.Size).decode()
+                        match = version_regex.search(string)
+                        if match:
+                            return match.group(1)
 
     def get_string(self, address):
         """ Returns an NSIS expanded string given its |address|. """
@@ -123,9 +130,12 @@ class NSIS:
 
     def _get_pe(self):
         """ Lazilly load a PE instance from the NSIS installer. """
-        import pefile
-        if self._pe is None:
-            self._pe = pefile.PE(self.path)
+        try:
+            import pefile
+            if self._pe is None:
+                self._pe = pefile.PE(self.path)
+        except:
+            pass
 
         return self._pe
 

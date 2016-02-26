@@ -1,3 +1,4 @@
+from builtins import bytes
 import struct
 import zlib
 from collections import namedtuple
@@ -253,7 +254,7 @@ def _extract_header(nsis_file, firstheader):
 
     header = Header._make(_header_pack.unpack_from(inflated_data))
     firstheader.header = header
-    firstheader._raw_header = inflated_data
+    firstheader._raw_header = bytes(inflated_data)
     firstheader._raw_header_c_size = data_size
 
     # Parse the block headers.

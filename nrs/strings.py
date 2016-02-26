@@ -45,7 +45,7 @@ def _langcode_name(nlang):
 def _shell_name(param1, param2):
     return '$__SHELL_{}_{}__'.format(param1, param2).encode()
 
-def decode(block, offset):
+def decode(block, offset=0):
     """ Decode special characters found in NSIS strings. """
     string = bytearray()
     data = block[offset:]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from nrs.nsisfile import NSIS, HeaderNotFound
-from nrs import fileform
+from nrs import fileform, strings
 import pefile
 import sys
 import os
@@ -87,7 +87,7 @@ def print_property(key, value, indent=0):
         print(format_key(key, indent) +
                 '[' + ', '.join(hex(x) for x in value) + ']')
     else:
-        print(format_key(key, indent) + value)
+        print('{}: "{}"'.format(format_key(key, indent), value))
 
 def print_property_flag(key, value, flags_set, indent=0):
     flags = ' | '.join([flag for flag in flags_set
@@ -103,12 +103,12 @@ def print_property_enum(key, value, enum_set, indent=0):
 def print_property_string(key, value, nsis, indent=0):
     if value != 0xffffffff:
         string = nsis.get_string(value)
-        print(format_key(key, indent) + '{!r} @ 0x{:08x}'.format(string, value))
+        print(format_key(key, indent) + '{} @ 0x{:08x}'.format(string, value))
     else:
-        print_property(key, "''")
+        print_property(key, "")
 
 def print_string(value, indent=0):
-    print(('\t'*indent) + '"' + (value) + '"')
+    print(('\t'*indent) + '"' + value + '"')
 
 def dump_all(path):
     try:
@@ -220,7 +220,7 @@ def dump_all(path):
             print_property('code', section.code, indent=1)
             print_property('code_size', section.code_size, indent=1)
             print_property('size_kb', section.size_kb, indent=1)
-            print_property('name', section.name.decode(), indent=1)
+            print_property('name', strings.decode(section.name)[0], indent=1)
 
 
     except HeaderNotFound:

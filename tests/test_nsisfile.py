@@ -2,6 +2,7 @@ from nrs import nsisfile
 import pytest
 import utils
 import os
+import sys
 
 def test_non_nsis():
     with pytest.raises(nsisfile.HeaderNotFound):
