@@ -1,4 +1,4 @@
-[![Circle CI](https://circleci.com/gh/isra17/nrs.svg?style=svg)](https://circleci.com/gh/isra17/nrs)
+[![Build Status](https://travis-ci.org/isra17/nrs.svg?branch=master)](https://travis-ci.org/isra17/nrs)
 
 # NRS
 ## NSIS Reversing Suite
