@@ -1,1 +1,2 @@
--e git+https://github.com/esnesenon/pefile.git#egg=pefile
+-e git+https://github.com/esnesenon/pefile.git@45db85d32dc1424bae46e222425243d5a00f4f33#egg=pefile
+pytest==2.8.7
