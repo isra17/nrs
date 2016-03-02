@@ -238,20 +238,55 @@ def _find_firstheader(nsis_file):
 
         pos += len(chunk)
 
-def _extract_header(nsis_file, firstheader):
-    nsis_file.seek(firstheader.data_offset)
-    data_size = struct.unpack('<I', nsis_file.read(4))[0]
+def _is_lzma(data):
+    def _is_lzma_header(data):
+        return data[0:3] == [0x5d, 0, 0] and data[5] == 0 and (data[6] & 0x80 == 0)
+    return (_is_lzma_header(data) or (data[0] <= 1 and _is_lzma_header(data[1:])))
 
-    if data_size & 0x80000000:
-        # Data is deflated.
-        data_size &= 0x7fffffff
-        deflated_data = nsis_file.read(data_size)
-        inflated_data = zlib.decompress(deflated_data, -zlib.MAX_WBITS)
+def _is_bzip2(data):
+    return data[0] == 0x31 and data[1] < 0xe
+
+def _zlib(f, size):
+    data = f.read(size)
+    return zlib.decompress(data, -zlib.MAX_WBITS)
+
+def _bzip2(f, size):
+    pass
+
+def inflate_header(nsis_file, data_offset):
+    nsis_file.seek(data_offset)
+    chunk = nsis_file.read(0xc)
+    data_size = struct.unpack_from('<I', chunk)[0]
+    solid = True
+    decoder = None
+
+    if _is_lzma(chunk):
+        raise NotImplemented('Solid LZMA')
+    elif chunk[3] == 0x80:
+        solid = False
+        if _is_lzma(chunk[4:]):
+            raise NotImplemented('Not-Solid LZMA')
+        elif _is_bzip2(chunk[4:]):
+            raise NotImplemented('Not-Solid Bzip2')
+        else:
+            decoder = _zlib
+    elif _is_bzip2(chunk):
+        decoder = _bzip2
     else:
-        inflated_data = nsis_file.read(data_size)
+        raise NotImplemented('Solid Deflate')
 
-    assert(len(inflated_data) == firstheader.u_size)
+    if solid:
+        deflated_data = nsis_file.seek(data_offset)
+    else:
+        nsis_file.seek(data_offset+4)
+        data_size &= 0x7fffffff
 
+    inflated_data = decoder(nsis_file, data_size)
+
+    return inflated_data, data_size
+
+def _extract_header(nsis_file, firstheader):
+    inflated_data, data_size = inflate_header(nsis_file, firstheader.data_offset)
     header = Header._make(_header_pack.unpack_from(inflated_data))
     firstheader.header = header
     firstheader._raw_header = bytes(inflated_data)
