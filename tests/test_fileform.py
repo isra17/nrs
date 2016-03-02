@@ -38,3 +38,11 @@ def test_extract_blocks():
             pages_block = fileform._extract_block(nsis_file, firstheader, block_id)
             assert pages_block is not None
 
+def test_extract_vopackage():
+    with open(os.path.join(utils.SAMPLES_DIR, 'vopackage'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+
+        assert header is not None
+
