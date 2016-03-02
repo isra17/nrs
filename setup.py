@@ -13,7 +13,7 @@ setup(name='NRS',
       description='NSIS Reversing Suite',
       author='isra17',
       author_email='isra017@gmail.com',
-      packages=['nrs', 'libnsis'],
+      packages=['nrs', 'nrs.libnsis'],
 
       setup_requires=['pytest-runner'],
       tests_require=['pytest'],
