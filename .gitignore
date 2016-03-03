@@ -60,4 +60,6 @@ target/
 #Ipython Notebook
 .ipynb_checkpoints
 
-.venv
+.venv*
+ext/bzip2/bzip2.py
+ext/bzip2/bzlib_wrap.c
