@@ -2,11 +2,11 @@
 
 from setuptools import setup, Extension
 
-bzip2 = Extension('_bzip2', [
-    'ext/bzip2/bzlib.i',
-    'ext/bzip2/bzlib.c',
-    'ext/bzip2/decompress.c',
-    'ext/bzip2/huffman.c'
+bzlib = Extension('nrs.ext._bzlib', [
+    'nrs/ext/bzlib.i',
+    'nrs/ext/bzlib.c',
+    'nrs/ext/decompress.c',
+    'nrs/ext/huffman.c'
 ])
 
 setup(name='NRS',
@@ -14,10 +14,10 @@ setup(name='NRS',
       description='NSIS Reversing Suite',
       author='isra17',
       author_email='isra017@gmail.com',
-      packages=['nrs'],
+      packages=['nrs','nrs.ext'],
 
       setup_requires=['pytest-runner'],
       tests_require=['pytest'],
-      ext_modules=[bzip2]
+      ext_modules=[bzlib]
     )
 
