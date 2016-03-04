@@ -251,7 +251,11 @@ def _zlib(f, size):
     return zlib.decompress(data, -zlib.MAX_WBITS)
 
 def _bzip2(f, size):
-    pass
+    from nrs.ext import bzlib
+    data = f.read()
+    inflated_data = bzlib.decompress(data)
+    size, = struct.unpack_from('<I', inflated_data)
+    return inflated_data[4:size+4]
 
 def inflate_header(nsis_file, data_offset):
     nsis_file.seek(data_offset)

@@ -79,5 +79,8 @@ def decode(block, offset=0):
         else:
             string.append(c)
 
-    return (string.decode(), i)
+    try:
+        return (string.decode(), i)
+    except UnicodeDecodeError:
+        return (repr(string), i)
 
