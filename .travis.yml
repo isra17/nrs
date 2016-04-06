@@ -10,3 +10,6 @@ script:
   - py.test -v
   - ./nsisdump.py tests/samples/example1.exe
 
+addons:
+  apt_packages:
+    - swig
