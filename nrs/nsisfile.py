@@ -1,4 +1,3 @@
-import pefile
 import re
 from builtins import bytes
 from . import fileform, strings
@@ -13,15 +12,20 @@ class HeaderNotFound(Exception):
     pass
 
 class NSIS:
-    def __init__(self, path):
+    @staticmethod
+    def from_path(path):
+        with open(path, 'rb') as fd:
+            return NSIS(fd)
+
+    def __init__(self, fd):
         """
-        Create a new NSIS instance given an NSIS installer located at |path|.
+        Create a new NSIS instance given an NSIS installer loaded in |fd|.
         """
         self._block_cache = {}
         self._pe = None
 
-        self.path = path
-        """ Parsed installer path. """
+        self.fd = fd
+        """ Parsed installer file. """
 
         self.firstheader = None
         """ Firstheader structure found at the beginning of the NSIS blob. """
@@ -40,14 +44,8 @@ class NSIS:
         self.pages = []
         """ Installer pages. """
 
-        if not self._parse(path):
+        if not self._parse():
             raise HeaderNotFound()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()
 
     def get_version(self):
         """ Lookup for the NSIS version of the NSIS installer. """
@@ -139,23 +137,22 @@ class NSIS:
 
         return self._pe
 
-    def _parse(self, path):
-        with open(path, 'rb') as fd:
-            self.firstheader = fileform._find_firstheader(fd)
-            if self.firstheader is None:
-                return False
+    def _parse(self):
+        self.firstheader = fileform._find_firstheader(self.fd)
+        if self.firstheader is None:
+            return False
 
-            self.header = fileform._extract_header(fd, self.firstheader)
+        self.header = fileform._extract_header(self.fd, self.firstheader)
 
-            self.pages = fileform._parse_pages(
-                    self.block(NB_PAGES),
-                    self.header.blocks[NB_PAGES].num)
+        self.pages = fileform._parse_pages(
+                self.block(NB_PAGES),
+                self.header.blocks[NB_PAGES].num)
 
-            self.sections = fileform._parse_sections(
-                    self.block(NB_SECTIONS),
-                    self.header.blocks[NB_SECTIONS].num)
+        self.sections = fileform._parse_sections(
+                self.block(NB_SECTIONS),
+                self.header.blocks[NB_SECTIONS].num)
 
-            self.entries = fileform._parse_entries(
-                    self.block(NB_ENTRIES),
-                    self.header.blocks[NB_ENTRIES].num)
+        self.entries = fileform._parse_entries(
+                self.block(NB_ENTRIES),
+                self.header.blocks[NB_ENTRIES].num)
         return True

@@ -112,7 +112,7 @@ def print_string(value, indent=0):
 
 def dump_all(path):
     try:
-        nsis = NSIS(path)
+        nsis = NSIS.from_path(path)
 
         # NSISDump version info.
         print('NSISDump v0.1' + os.linesep)

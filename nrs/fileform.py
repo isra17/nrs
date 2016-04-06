@@ -259,7 +259,7 @@ def _bzip2(f, size):
 
 def inflate_header(nsis_file, data_offset):
     nsis_file.seek(data_offset)
-    chunk = nsis_file.read(0xc)
+    chunk = bytes(nsis_file.read(0xc))
     data_size = struct.unpack_from('<I', chunk)[0]
     solid = True
     decoder = None
