@@ -1,0 +1,231 @@
+from idaapi import *
+import idaapi
+import struct
+
+class NsisProcessor(processor_t):
+    """ NSIS Processor class used by IDA to disassemble and analyze NSIS code. """
+    # IDP id (Chosen arbitrarily > 0x8000).
+    id = 0x8513
+
+    # Processor features.
+    flag = PR_USE32 | PR_DEFSEG32 | PR_RNAMESOK | PRN_DEC | PR_NO_SEGMOVE
+
+    # Bits in byte for code segments.
+    cnbits = 8
+
+    #  Bits in byte for non-code segments.
+    dnbits = 8
+
+    # Short processor names.
+    psnames = ['nsis']
+
+    # Long processor names.
+    plnames = ['NSIS Script Byte code']
+
+    # Size of a segment registrer in bytes.
+    segreg_size = 0
+
+    # Array or 'return' instruction opcodes.
+    retcodes = [struct.pack('<I',1) + struct.pack('<I', 0) * 6]
+
+    # First's instruction icode.
+    instruc_start = 0
+
+    # Size of long double.
+    tbyte_size = 0
+
+    # Assembler features.
+    assembler = {
+        # Assembler flags.
+        'flag': ASB_BINF3 | ASH_HEXF3 | ASO_OCTF1,
+
+        # User defined flags.
+        'uflag': 0,
+
+        # Assembler name.
+        'name': 'NSIS Script Byte code assembler',
+
+        # org directive.
+        'origin': 'org',
+
+        # end directive.
+        'end': 'end',
+
+        # Comment string.
+        'cmnt': ';',
+
+        # ASCII string delimiter.
+        'ascsep': '"',
+
+        # ASCII char constant delimiter.
+        'accsep': "'",
+
+        # ASCII special chars.
+        'esccodes': '"\'',
+
+        # Data representation.
+        'a_ascii': 'db',
+        'a_byte': 'db',
+        'a_word': 'dw',
+        'a_dword': 'dd',
+
+        'a_dups': '#d dup(#v)',
+        'a_bss': '%s dup ?',
+        'a_seg': 'seg',
+        'a_curip': '$',
+        'a_public': 'public',
+        'a_weak': 'weak',
+        'a_extrn': 'extrn',
+        'a_comdef': '',
+        'a_align': 'align',
+        'lbrace': '(',
+        'rbrace': ')',
+        'a_mod': '%',
+        'a_band': '&',
+        'a_bor': '|',
+        'a_xor': '^',
+        'a_bnot': '~',
+        'a_shl': '<<',
+        'a_shr': '>>',
+        'a_sizeof_fmt': 'size %s',
+    } # Assembler.
+
+    def get_frame_retsize(self):
+        return 4
+
+    def header(self):
+        return
+
+    def handle_operand(self, op, isRead):
+        pass
+
+    def ana(self):
+        """ Decode NSIS instruction. """
+        opcode = ua_next_long()
+        params = [ua_next_long() for _ in range(6)]
+
+        if opcode in self.itable:
+            ins = self.itable[opcode]
+        else:
+            ins = self.itable[0]
+
+        self.cmd.itype = opcode
+        return self.cmd.size if ins.d(params) else 0
+
+    def emu(self):
+        """ Emulate instruction behavior. """
+        feature = self.cmd.get_canon_feature()
+
+        # Add flow cref.
+        if not (feature & CF_STOP):
+            ua_add_cref(0, self.cmd.ea + self.cmd.size, fl_F)
+
+        return 1
+
+    def out(self):
+        """ Output instruction in textform. """
+        buf = idaapi.init_output_buffer(1024)
+        OutMnem(12)
+
+        term_output_buffer()
+        cvar.gl_comm = 1
+        MakeLine(buf)
+
+    def outop(self):
+        """ Output instruction's operand in textform. """
+        return True
+
+    # Instruction decoding functions.
+    def decode_VOID(self, params):
+        """ Decode instruction without operands. """
+        self.cmd.Op1.type = o_void
+        return True
+
+
+    def init_instructions(self):
+        class idef:
+            def __init__(self, name, cf, d):
+                self.name = name
+                self.cf = cf
+                self.d = d
+
+        i_invalid = idef(name='INVALID', d=self.decode_VOID, cf = 0)
+        def notimplemented(n):
+            return idef(name='NotImplemented_' + str(n), d=self.decode_VOID, cf=0)
+
+        self.itable = [
+            i_invalid, # 0x00
+            idef(name='RETURN', d=self.decode_VOID, cf = CF_STOP), # 0x01
+            notimplemented(2),
+            notimplemented(3),
+            notimplemented(4),
+            notimplemented(5),
+            notimplemented(6),
+            notimplemented(7),
+            notimplemented(8),
+            notimplemented(9),
+            notimplemented(10),
+            idef(name='CREATEDIR', d=self.decode_VOID, cf = 0), # 0x0b
+            notimplemented(12),
+            notimplemented(13),
+            notimplemented(14),
+            notimplemented(15),
+            notimplemented(16),
+            notimplemented(17),
+            notimplemented(18),
+            notimplemented(19),
+            idef(name='EXTRACTFILE', d=self.decode_VOID, cf = 0), # 0x14
+        ]
+
+        self.itable += [idef(name='Invalid'+str(i), d=self.decode_VOID,cf=0)
+                            for i in range(len(self.itable),100)]
+
+        # Now create an instruction table compatible with IDA processor module requirements
+        instructions = []
+        for i, x in enumerate(self.itable):
+            d = dict(name=x.name, feature=x.cf)
+            instructions.append(d)
+            setattr(self, 'itype_' + x.name, i)
+
+        # icode of the last instruction + 1
+        self.instruc_end = len(instructions) + 1
+
+        # Array of instructions
+        self.instruc = instructions
+
+        # Icode of return instruction. It is ok to give any of possible return
+        # instructions
+        self.icode_return = self.itype_RETURN
+
+    def init_registers(self):
+        """
+        This function parses the register table and creates corresponding
+        ireg_XXX constants
+        """
+        self.regNames = sorted([x for n in range(10) for x in ('$'+str(n), '$R'+str(n))])
+        self.regNames += ['CS','DS'] # Fake segment registers.
+
+        # Create the ireg_XXXX constants
+        for i, name in enumerate(self.regNames):
+            setattr(self, 'ireg_' + name, i)
+
+        # Segment register information (use virtual CS and DS registers if your
+        # processor doesn't have segment registers):
+        self.regFirstSreg = self.ireg_CS
+        self.regLastSreg  = self.ireg_DS
+
+        # number of CS register
+        self.regCodeSreg = self.ireg_CS
+
+        # number of DS register
+        self.regDataSreg = self.ireg_DS
+
+    def __init__(self):
+        idaapi.processor_t.__init__(self)
+        self.PTRSZ = 4
+        self.init_instructions()
+        self.init_registers()
+
+def PROCESSOR_ENTRY():
+    return NsisProcessor()
+

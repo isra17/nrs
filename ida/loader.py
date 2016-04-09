@@ -29,5 +29,15 @@ def load_file(li, netflags, format):
         seg.endEA = offset + len(content)
         idaapi.add_segm_ex(seg, name, sclass, 0)
         idaapi.mem2base(content, offset)
+
+    code_base = nsis.header.blocks[fileform.NB_ENTRIES].offset
+    for i, section in enumerate(nsis.sections):
+        name = nsis.get_string(section.name_ptr)
+        if not name:
+            name = '_section' + str(i)
+        ea = code_base + section.code
+        AddEntryPoint(ea, ea, name, 1)
+
+    SetProcessorType("nsis", SETPROC_ALL|SETPROC_FATAL)
     return 1
 
