@@ -1,3 +1,5 @@
+import nrs
+import idaapi
 from nrs import fileform, nsisfile
 
 BLOCKS = [
@@ -30,6 +32,7 @@ def load_file(li, netflags, format):
         idaapi.add_segm_ex(seg, name, sclass, 0)
         idaapi.mem2base(content, offset)
 
+    # Create sections.
     code_base = nsis.header.blocks[fileform.NB_ENTRIES].offset
     for i, section in enumerate(nsis.sections):
         name = nsis.get_string(section.name_ptr)
@@ -38,6 +41,20 @@ def load_file(li, netflags, format):
         ea = code_base + section.code
         AddEntryPoint(ea, ea, name, 1)
 
+    # Create strings.
+    strings_data = nsis.block(fileform.NB_STRINGS)
+    strings_off = nsis.header.blocks[fileform.NB_STRINGS].offset
+    i = 0
+    while i < len(strings_data):
+        decoded_string, length = nrs.strings.decode(strings_data, i)
+        decoded_string = str(decoded_string)
+        idaapi.make_ascii_string(strings_off + i, length, ASCSTR_C)
+        idaapi.set_cmt(strings_off + i, decoded_string, True)
+        idaapi.do_name_anyway(strings_off + i, decoded_string)
+        i += length
+
+
+    # Set processor to nsis script.
     SetProcessorType("nsis", SETPROC_ALL|SETPROC_FATAL)
     return 1
 
