@@ -103,9 +103,8 @@ class NsisProcessor(processor_t):
     def handle_operand(self, op, isRead):
         dref_flag = dr_R if isRead else dr_W
 
-        if op.type == o_imm:
-            #ua_add_off_drefs(op, dref_flag)
-            pass
+        if op.type == o_mem:
+            ua_add_dref((op.n+1)*4, op.addr, dref_flag)
 
     def ana(self):
         """ Decode NSIS instruction. """
