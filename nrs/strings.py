@@ -82,5 +82,5 @@ def decode(block, offset=0):
     try:
         return (string.decode(), i)
     except UnicodeDecodeError:
-        return (repr(string), i)
+        return (repr(str(string)), i)
 

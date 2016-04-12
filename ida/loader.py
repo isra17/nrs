@@ -1,5 +1,7 @@
 import nrs
 import idaapi
+import string
+import nrs
 from nrs import fileform, nsisfile
 
 BLOCKS = [
@@ -13,6 +15,11 @@ BLOCKS = [
     ('DATA', fileform.NB_DATA, 'DATA'),
 ]
 
+allowed_name_char = string.ascii_letters + string.digits
+def canonize_name(name):
+    """ Limit names to a subset of ascii character. """
+    return str(''.join([c if c in allowed_name_char else '_' for c in name]))
+
 def accept_file(li, n):
     li.seek(0)
     if n == 0 and fileform._find_firstheader(li):
@@ -20,8 +27,7 @@ def accept_file(li, n):
     return 0
 
 def load_file(li, netflags, format):
-    li.seek(0)
-    nsis = nsisfile.NSIS(li)
+    nsis = nsisfile.NSIS.from_path(idaapi.get_input_file_path())
     for name, n, sclass in BLOCKS:
         offset = nsis.header.blocks[n].offset
         content = nsis.block(n)
@@ -32,14 +38,16 @@ def load_file(li, netflags, format):
         idaapi.add_segm_ex(seg, name, sclass, 0)
         idaapi.mem2base(content, offset)
 
-    # Create sections.
+    # Create sections functions.
     code_base = nsis.header.blocks[fileform.NB_ENTRIES].offset
     for i, section in enumerate(nsis.sections):
         name = nsis.get_string(section.name_ptr)
         if not name:
             name = '_section' + str(i)
-        ea = code_base + section.code
-        AddEntryPoint(ea, ea, name, 1)
+        ea = code_base + nrs.entry_to_offset(section.code)
+        cname = canonize_name(name)
+        print(hex(ea), repr(cname))
+        AddEntryPoint(ea, ea, cname, 1)
 
     # Create strings.
     strings_data = nsis.block(fileform.NB_STRINGS)
@@ -48,9 +56,10 @@ def load_file(li, netflags, format):
     while i < len(strings_data):
         decoded_string, length = nrs.strings.decode(strings_data, i)
         decoded_string = str(decoded_string)
+        string_name = canonize_name(decoded_string)
         idaapi.make_ascii_string(strings_off + i, length, ASCSTR_C)
         idaapi.set_cmt(strings_off + i, decoded_string, True)
-        idaapi.do_name_anyway(strings_off + i, decoded_string)
+        idaapi.do_name_anyway(strings_off + i, string_name)
         i += length
 
 

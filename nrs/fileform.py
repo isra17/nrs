@@ -253,7 +253,7 @@ def _zlib(f, size):
 def _bzip2(f, size):
     from nrs.ext import bzlib
     data = f.read()
-    inflated_data = bzlib.decompress(data)
+    inflated_data = bytes(bzlib.decompress(data))
     size, = struct.unpack_from('<I', inflated_data)
     return inflated_data[4:size+4]
 
