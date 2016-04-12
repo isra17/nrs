@@ -61,7 +61,6 @@ def decode(block, offset=0):
         if c < NS_SKIP_CODE:
             param1 = data[i]
             param2 = data[i+1]
-            param = struct.unpack('<H', data[i:i+2])[0]
             param = (param1 & 0x7f) | ((param2 & 0x7f) << 7)
 
             i += 2

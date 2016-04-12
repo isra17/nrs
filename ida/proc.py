@@ -1,6 +1,7 @@
 from idaapi import *
 import idaapi
 import struct
+import nrs
 
 class NsisProcessor(processor_t):
     """ NSIS Processor class used by IDA to disassemble and analyze NSIS code. """
@@ -98,6 +99,10 @@ class NsisProcessor(processor_t):
         seg = get_segm_by_name('VARS')
         return addr + seg.startEA
 
+    def rebase_code_entry(self, entry):
+        seg = get_segm_by_name('ENTRIES')
+        return nrs.entry_to_offset(entry) + seg.startEA
+
     def get_frame_retsize(self):
         return 4
 
@@ -106,9 +111,16 @@ class NsisProcessor(processor_t):
 
     def handle_operand(self, op, isRead):
         dref_flag = dr_R if isRead else dr_W
+        offb = (op.n+1)*4
 
         if op.type == o_mem:
-            ua_add_dref((op.n+1)*4, op.addr, dref_flag)
+            ua_add_dref(offb, op.addr, dref_flag)
+        elif op.type == o_near:
+            if self.cmd.itype == self.itype_CALL:
+                fl = fl_CN
+            else:
+                fl = fl_JN
+            ua_add_cref(offb, op.addr, fl)
 
     def ana(self):
         """ Decode NSIS instruction. """
@@ -120,8 +132,13 @@ class NsisProcessor(processor_t):
         else:
             ins = self.itable[0]
 
+        # Decode "virtual instruction" (eg. PUSHPOP -> PUSH/POP/EXCH)
+        if ins.v:
+            opcode = ins.v(opcode, params)
+            ins = self.itable[opcode]
+
         self.cmd.itype = opcode
-        return self.cmd.size if ins.d(params) else 0
+        return self.cmd.size if self.decode(ins.d, params) else 0
 
     def emu(self):
         """ Emulate instruction behavior. """
@@ -140,10 +157,25 @@ class NsisProcessor(processor_t):
         if feature & CF_USE6:
             self.handle_operand(self.cmd.Op6, 1)
 
+        if feature & CF_CHG1:
+            self.handle_operand(self.cmd.Op1, 0)
+        if feature & CF_CHG2:
+            self.handle_operand(self.cmd.Op2, 0)
+        if feature & CF_CHG3:
+            self.handle_operand(self.cmd.Op3, 0)
+        if feature & CF_CHG4:
+            self.handle_operand(self.cmd.Op4, 0)
+        if feature & CF_CHG5:
+            self.handle_operand(self.cmd.Op5, 0)
+        if feature & CF_CHG6:
+            self.handle_operand(self.cmd.Op6, 0)
+
+        if feature & CF_JUMP:
+            QueueSet(Q_jumps, self.cmd.ea)
+
         # Add flow cref.
         if not (feature & CF_STOP):
             ua_add_cref(0, self.cmd.ea + self.cmd.size, fl_F)
-
 
         return 1
 
@@ -165,9 +197,11 @@ class NsisProcessor(processor_t):
 
     def outop(self, op):
         """ Output instruction's operand in textform. """
-        if op.type == o_imm:
+        if op.type == o_reg:
+            out_register(self.regNames[op.reg])
+        elif op.type == o_imm:
             OutValue(op, OOFW_IMM)
-        elif op.type == o_mem:
+        elif op.type in [o_mem, o_near]:
             r = out_name_expr(op, op.addr, BADADDR)
             if not r:
                 out_tagon(COLOR_ERROR)
@@ -198,82 +232,114 @@ class NsisProcessor(processor_t):
             op.dtyp = dt_string
             op.addr = self.rebase_var_addr(x)
 
+    def op_jmp(self, op, addr):
+        op.type = o_near
+        op.addr = self.rebase_code_entry(addr-1)
+
     def op_void(self, op):
         op.type = o_void
 
-    def decode_VOID(self, params):
-        """ Decode instruction without operands. """
-        self.cmd.Op1.type = o_void
+    def decode(self, fmt, params):
+        if fmt == '':
+            self.op_void(self.cmd.Op1)
+            return True
+
+        for i, (c,p) in enumerate(zip(fmt, params)):
+            op = self.cmd[i]
+            if c == 'I':
+                self.op_imm(op, p)
+            elif c == 'S':
+                self.op_str(op, p)
+            elif c == 'V':
+                self.op_var(op, p)
+            elif c == 'J':
+                if p > 0:
+                    self.op_jmp(op, p)
+                else:
+                    self.op_imm(op, p)
+            else:
+                return False
         return True
 
-    def decode_SI(self, params):
-        self.op_str(self.cmd.Op1, params[0])
-        self.op_imm(self.cmd.Op2, params[1])
-        self.op_void(self.cmd.Op3)
-        return True
+    def virt_pushpop(self, opcode, params):
+        if params[1]:
+            return self.itype_POP
+        elif params[1]:
+            return self.itype_EXCH
+        else:
+            return self.itype_PUSH
 
-    def decode_ISIIII(self, params):
-        self.op_imm(self.cmd.Op1, params[0])
-        self.op_str(self.cmd.Op2, params[1])
-        self.op_imm(self.cmd.Op3, params[2])
-        self.op_imm(self.cmd.Op4, params[3])
-        self.op_imm(self.cmd.Op5, params[4])
-        self.op_imm(self.cmd.Op6, params[5])
-        return True
+    def virt_setflag(self, opcode, params):
+        if params[0] == 2 and params[1] == 0xac:
+            return self.itype_CLEARERRORS
+        return opcode
 
-    def decode_VSII(self, params):
-        self.op_var(self.cmd.Op1, params[0])
-        self.op_str(self.cmd.Op2, params[1])
-        self.op_imm(self.cmd.Op3, params[2])
-        self.op_imm(self.cmd.Op4, params[3])
-        self.op_void(self.cmd.Op5)
-        return True
+    def virt_ifflag(self, opcode, params):
+        if params[1] == 0 and params[2] == 2 and params[3] == 0:
+            return self.itype_IFERRORS
+        return opcode
 
     def init_instructions(self):
         class idef:
-            def __init__(self, name, cf, d):
+            def __init__(self, name, cf=0, d='', v=None):
                 self.name = name
                 self.cf = cf
                 self.d = d
+                self.v = v
 
-        i_invalid = idef(name='INVALID', d=self.decode_VOID, cf = 0)
+        i_invalid = idef(name='INVALID')
         def notimplemented(n):
-            return idef(name='NotImplemented_' + str(n), d=self.decode_VOID, cf=0)
+            return idef(name='NotImplemented_' + hex(n))
 
         self.itable = [
             i_invalid, # 0x00
-            idef(name='RETURN', d=self.decode_VOID, cf=CF_STOP), # 0x01
-            notimplemented(2),
-            notimplemented(3),
-            notimplemented(4),
-            notimplemented(5),
-            notimplemented(6),
-            notimplemented(7),
-            notimplemented(8),
-            notimplemented(9),
-            notimplemented(10),
-            idef(name='CREATEDIR', d=self.decode_SI, cf=CF_USE1 | CF_USE2), # 0x0b
-            notimplemented(12),
-            notimplemented(13),
-            notimplemented(14),
+            idef(name='RETURN', d='', cf=CF_STOP), # 0x01
+            notimplemented(2), # 0x02
+            idef(name='ABORT', d='I', cf=CF_USE1|CF_STOP), # 0x03
+            notimplemented(4), # 0x04
+            idef(name='CALL', d='J', cf=CF_USE1|CF_CALL), # 0x05
+            notimplemented(6), # 0x06
+            notimplemented(7), # 0x07
+            notimplemented(8), # 0x08
+            notimplemented(9), # 0x09
+            notimplemented(10), # 0x0a
+            idef(name='CREATEDIR', d='SI', cf=CF_USE1|CF_USE2), # 0x0b
+            notimplemented(12), # 0x0c
+            idef(name='SETFLAG', d='II', v=self.virt_setflag,
+                 cf=CF_USE1|CF_USE2), # 0x0d
+            idef(name='IFFLAG', d='JJII',v=self.virt_ifflag,
+                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x0e
             notimplemented(15),
             notimplemented(16),
             notimplemented(17),
             notimplemented(18),
             notimplemented(19),
-            idef(name='EXTRACTFILE', d=self.decode_ISIIII, \
+            idef(name='EXTRACTFILE', d='ISIIII', \
                  cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x14
             notimplemented(21),
             notimplemented(22),
             notimplemented(23),
             notimplemented(24),
-            idef(name='ASSIGNVAR', d=self.decode_VSII, \
-                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x19
+            idef(name='ASSIGNVAR', d='VSII', \
+                 cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x19
             notimplemented(26),
+            notimplemented(27),
+            notimplemented(28),
+            notimplemented(29),
+            notimplemented(30),
+            idef(name='PUSHPOP', v=self.virt_pushpop), # 0x1f
         ]
 
-        self.itable += [idef(name='Invalid'+str(i), d=self.decode_VOID,cf=0)
+        self.itable += [idef(name='Invalid'+hex(i))
                             for i in range(len(self.itable),100)]
+
+        self.itable += [
+            idef(name='PUSH', d='S', cf=CF_USE1),
+            idef(name='POP', d='V', cf=CF_CHG1),
+            idef(name='EXCH', d='I', cf=CF_USE1|CF_CHG1),
+            idef(name='CLEARERRORS'),
+            idef(name='IFERRORS', d='J', cf=CF_USE1),
+        ]
 
         # Now create an instruction table compatible with IDA processor module requirements
         instructions = []
