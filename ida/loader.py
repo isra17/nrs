@@ -15,10 +15,13 @@ BLOCKS = [
     ('DATA', fileform.NB_DATA, 'DATA'),
 ]
 
-allowed_name_char = string.ascii_letters + string.digits
+allowed_name_char = string.ascii_letters + string.digits + '$'
 def canonize_name(name):
     """ Limit names to a subset of ascii character. """
     return str(''.join([c if c in allowed_name_char else '_' for c in name]))
+
+def align(addr):
+    return (addr + 0xfff) & 0xfffff000
 
 def accept_file(li, n):
     li.seek(0)
@@ -28,8 +31,12 @@ def accept_file(li, n):
 
 def load_file(li, netflags, format):
     nsis = nsisfile.NSIS.from_path(idaapi.get_input_file_path())
+
+    # Create blocks segments.
     for name, n, sclass in BLOCKS:
         offset = nsis.header.blocks[n].offset
+        if offset == 0:
+            continue
         content = nsis.block(n)
         # Create block segment
         seg = idaapi.segment_t()
@@ -37,6 +44,16 @@ def load_file(li, netflags, format):
         seg.endEA = offset + len(content)
         idaapi.add_segm_ex(seg, name, sclass, 0)
         idaapi.mem2base(content, offset)
+
+    # Add one virtual segment to hold variables.
+    var_seg = idaapi.segment_t()
+    var_start = align(nsis.size())
+    var_seg.startEA = var_start
+    var_seg.endEA = var_start + 0x1000 # Size chosen arbitrarily, should be enough.
+    idaapi.add_segm_ex(var_seg, 'VARS', 'BSS', 0)
+    # Create standard vars.
+    for i, v in enumerate(nrs.strings.SYSVAR_NAMES.values()):
+        idaapi.do_name_anyway(var_seg.startEA + i + 20, '$' + v)
 
     # Create sections functions.
     code_base = nsis.header.blocks[fileform.NB_ENTRIES].offset

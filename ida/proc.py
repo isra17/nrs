@@ -94,6 +94,10 @@ class NsisProcessor(processor_t):
         seg = get_segm_by_name('STRINGS')
         return addr + seg.startEA
 
+    def rebase_var_addr(self, addr):
+        seg = get_segm_by_name('VARS')
+        return addr + seg.startEA
+
     def get_frame_retsize(self):
         return 4
 
@@ -127,6 +131,14 @@ class NsisProcessor(processor_t):
             self.handle_operand(self.cmd.Op1, 1)
         if feature & CF_USE2:
             self.handle_operand(self.cmd.Op2, 1)
+        if feature & CF_USE3:
+            self.handle_operand(self.cmd.Op3, 1)
+        if feature & CF_USE4:
+            self.handle_operand(self.cmd.Op4, 1)
+        if feature & CF_USE5:
+            self.handle_operand(self.cmd.Op5, 1)
+        if feature & CF_USE6:
+            self.handle_operand(self.cmd.Op6, 1)
 
         # Add flow cref.
         if not (feature & CF_STOP):
@@ -177,6 +189,18 @@ class NsisProcessor(processor_t):
         op.dtyp = dt_dword
         op.value = imm
 
+    def op_var(self, op, x):
+        if x < 20:
+            op.type = o_reg
+            op.reg = x
+        else:
+            op.type = o_mem
+            op.dtyp = dt_string
+            op.addr = self.rebase_var_addr(x)
+
+    def op_void(self, op):
+        op.type = o_void
+
     def decode_VOID(self, params):
         """ Decode instruction without operands. """
         self.cmd.Op1.type = o_void
@@ -185,6 +209,7 @@ class NsisProcessor(processor_t):
     def decode_SI(self, params):
         self.op_str(self.cmd.Op1, params[0])
         self.op_imm(self.cmd.Op2, params[1])
+        self.op_void(self.cmd.Op3)
         return True
 
     def decode_ISIIII(self, params):
@@ -194,6 +219,14 @@ class NsisProcessor(processor_t):
         self.op_imm(self.cmd.Op4, params[3])
         self.op_imm(self.cmd.Op5, params[4])
         self.op_imm(self.cmd.Op6, params[5])
+        return True
+
+    def decode_VSII(self, params):
+        self.op_var(self.cmd.Op1, params[0])
+        self.op_str(self.cmd.Op2, params[1])
+        self.op_imm(self.cmd.Op3, params[2])
+        self.op_imm(self.cmd.Op4, params[3])
+        self.op_void(self.cmd.Op5)
         return True
 
     def init_instructions(self):
@@ -228,8 +261,15 @@ class NsisProcessor(processor_t):
             notimplemented(17),
             notimplemented(18),
             notimplemented(19),
-            idef(name='EXTRACTFILE', d=self.decode_ISIIII, cf=CF_USE1|CF_USE2| \
-                 CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x14
+            idef(name='EXTRACTFILE', d=self.decode_ISIIII, \
+                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x14
+            notimplemented(21),
+            notimplemented(22),
+            notimplemented(23),
+            notimplemented(24),
+            idef(name='ASSIGNVAR', d=self.decode_VSII, \
+                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x19
+            notimplemented(26),
         ]
 
         self.itable += [idef(name='Invalid'+str(i), d=self.decode_VOID,cf=0)

@@ -7,7 +7,7 @@ NS_SHELL_CODE = 2
 NS_VAR_CODE = 3
 NS_SKIP_CODE = 4
 
-_SYSVAR_NAMES = {
+SYSVAR_NAMES = {
     20: b'COMMANDLINE',
     21: b'INSTALLDIR',
     22: b'OUTPUTDIR',
@@ -21,7 +21,7 @@ _SYSVAR_NAMES = {
     30: b'CLICKNEXT',
 }
 
-_ESCAPE_MAP = {
+ESCAPE_MAP = {
     0x9: b'$\\t',
     0xa: b'$\\n',
     0xd: b'$\\r',
@@ -30,8 +30,8 @@ _ESCAPE_MAP = {
 
 
 def _nvar_name(nvar):
-    if nvar in _SYSVAR_NAMES:
-        return b'$' + _SYSVAR_NAMES[nvar]
+    if nvar in SYSVAR_NAMES:
+        return b'$' + SYSVAR_NAMES[nvar]
     elif nvar < 10:
         return b'$' + str(nvar).encode()
     elif nvar < 20:
@@ -74,8 +74,8 @@ def decode(block, offset=0):
         elif c == NS_SKIP_CODE:
             string += data[i]
             i += 1
-        elif c in _ESCAPE_MAP:
-            string += _ESCAPE_MAP[c]
+        elif c in ESCAPE_MAP:
+            string += ESCAPE_MAP[c]
         else:
             string.append(c)
 

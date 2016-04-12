@@ -117,6 +117,9 @@ class NSIS:
             self._block_cache[n] = self.firstheader._raw_header[start:end]
         return self._block_cache[n]
 
+    def size(self):
+        return len(self.firstheader._raw_header)
+
     def close(self):
         if self._pe is not None:
             self._pe.close()
