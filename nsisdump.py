@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from builtins import bytes
 from nrs.nsisfile import NSIS, HeaderNotFound
 from nrs import fileform, strings
 import pefile
@@ -119,11 +120,8 @@ def dump_all(path):
 
         # NSIS basic information.
         print('Installer path: ' + path)
-        nsis_version = nsis.get_version()
-        if nsis_version:
-            print('NSIS version: ' + nsis_version)
-        else:
-            print('NSIS version not found')
+        print('NSIS version: {}.{}'.format(nsis.version_major,
+                                           nsis.version_minor))
 
         # NSIS firstheader.
         print('')
@@ -220,7 +218,7 @@ def dump_all(path):
             print_property('code', section.code, indent=1)
             print_property('code_size', section.code_size, indent=1)
             print_property('size_kb', section.size_kb, indent=1)
-            print_property('name', strings.decode(section.name)[0], indent=1)
+            print_property('name', strings.decode(bytes(section.name))[0], indent=1)
 
 
     except HeaderNotFound:

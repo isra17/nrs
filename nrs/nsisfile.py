@@ -47,37 +47,7 @@ class NSIS:
         if not self._parse():
             raise HeaderNotFound()
 
-    def get_version(self):
-        """ Lookup for the NSIS version of the NSIS installer. """
-        version_regex = re.compile(r'Nullsoft Install System v(\w+\.\w+)')
-
-        for string in self.get_all_strings():
-            match = version_regex.search(string)
-            if match:
-                return match.group(1)
-
-        pe = self._get_pe()
-        if pe:
-            if hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE'):
-                manifest_entries = [
-                    d for d in pe.DIRECTORY_ENTRY_RESOURCE.entries
-                        if d.id == pefile.RESOURCE_TYPE['RT_MANIFEST']
-                ]
-
-                def get_entry_datas(entry):
-                    if hasattr(entry, 'data'):
-                        return [entry.data]
-                    else:
-                        return _flatten(get_entry_datas(entry) for entry
-                                            in entry.directory.entries)
-
-                for entry in manifest_entries:
-                    for data in get_entry_datas(entry):
-                        string = pe.get_data(data.struct.OffsetToData,
-                                             data.struct.Size).decode()
-                        match = version_regex.search(string)
-                        if match:
-                            return match.group(1)
+        self.version_major, self.version_minor = self._detect_version()
 
     def get_string(self, address):
         """ Returns an NSIS expanded string given its |address|. """
@@ -105,6 +75,21 @@ class NSIS:
 
         return strings
 
+    def get_all_raw_strings(self):
+        """
+        Returns all raw NSIS strings extracted from the strings section.
+        """
+        string_block_size = len(self.block(NB_STRINGS))
+        offset = 0
+        strings = []
+        while offset < string_block_size:
+            string = self.get_raw_string(offset)
+            if string:
+                strings.append(string)
+            offset += len(string) + 1
+
+        return strings
+
     def block(self, n):
         """ Return a block data given a NB_* enum |n| value. """
         if n not in self._block_cache:
@@ -124,21 +109,25 @@ class NSIS:
         if self._pe is not None:
             self._pe.close()
 
+    def _detect_version(self):
+        # Try to parse string and get
+        nsis2_codes = 0
+        nsis3_codes = 0
+        for string in self.get_all_raw_strings():
+            c = string[0]
+            if c <= 4:
+                nsis3_codes += 1
+            elif c >= 252:
+                nsis2_codes += 1
+
+        if nsis2_codes > nsis3_codes:
+            return '2', '?'
+        else:
+            return '3', '?'
+
     def _parse_string(self, address):
         """ Returns an NSIS expanded string given its |address|. """
         return strings.decode(self.block(NB_STRINGS), address)
-
-
-    def _get_pe(self):
-        """ Lazilly load a PE instance from the NSIS installer. """
-        try:
-            import pefile
-            if self._pe is None:
-                self._pe = pefile.PE(self.path)
-        except:
-            pass
-
-        return self._pe
 
     def _parse(self):
         self.firstheader = fileform._find_firstheader(self.fd)

@@ -32,6 +32,11 @@ def accept_file(li, n):
 def load_file(li, netflags, format):
     nsis = nsisfile.NSIS.from_path(idaapi.get_input_file_path())
 
+    # Create NSIS netnode.
+    nsis_netnode = idaapi.netnode('$ NSIS', 0, True)
+    nsis_netnode.hashset('VERSION_MAJOR', nsis.version_major)
+    nsis_netnode.hashset('VERSION_MINOR', nsis.version_minor)
+
     # Create blocks segments.
     for name, n, sclass in BLOCKS:
         offset = nsis.header.blocks[n].offset
@@ -71,7 +76,8 @@ def load_file(li, netflags, format):
     strings_off = nsis.header.blocks[fileform.NB_STRINGS].offset
     i = 0
     while i < len(strings_data):
-        decoded_string, length = nrs.strings.decode(strings_data, i)
+        decoded_string, length = \
+            nrs.strings.decode(strings_data, i, nsis.version_major)
         decoded_string = str(decoded_string)
         string_name = canonize_name(decoded_string)
         idaapi.make_ascii_string(strings_off + i, length, ASCSTR_C)

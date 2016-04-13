@@ -386,6 +386,8 @@ class NsisProcessor(processor_t):
         self.PTRSZ = 4
         self.init_instructions()
         self.init_registers()
+        self.nsis_netnode = netnode('$ NSIS')
+        self.nsis_version = self.nsis_netnode.hashstr('VERSION_MAJOR')
 
 def PROCESSOR_ENTRY():
     return NsisProcessor()
