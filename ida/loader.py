@@ -68,7 +68,6 @@ def load_file(li, netflags, format):
             name = '_section' + str(i)
         ea = code_base + nrs.entry_to_offset(section.code)
         cname = canonize_name(name)
-        print(hex(ea), repr(cname))
         AddEntryPoint(ea, ea, cname, 1)
 
     # Create strings.

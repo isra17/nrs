@@ -103,6 +103,13 @@ class NsisProcessor(processor_t):
         seg = get_segm_by_name('ENTRIES')
         return nrs.entry_to_offset(entry) + seg.startEA
 
+    def get_string_symbols(self, addr):
+        seg = get_segm_by_name('STRINGS')
+        maxlen = min(seg.endEA - addr, nrs.fileform.NSIS_MAX_STRLEN)
+        data = GetManyBytes(addr, maxlen)
+        symbols, _ = nrs.strings.symbolize(data, 0, self.nsis_version)
+        return symbols
+
     def get_frame_retsize(self):
         return 4
 
@@ -197,17 +204,41 @@ class NsisProcessor(processor_t):
 
     def outop(self, op):
         """ Output instruction's operand in textform. """
+        def out_name_addr(addr):
+            r = out_name_expr(op, addr, addr)
+            if not r:
+                out_tagon(COLOR_ERROR)
+                OutLong(addr, 16)
+                out_tagoff(COLOR_ERROR)
+                QueueSet(Q_noName, self.cmd.ea)
+
         if op.type == o_reg:
             out_register(self.regNames[op.reg])
         elif op.type == o_imm:
             OutValue(op, OOFW_IMM)
-        elif op.type in [o_mem, o_near]:
-            r = out_name_expr(op, op.addr, BADADDR)
-            if not r:
-                out_tagon(COLOR_ERROR)
-                OutLong(op.addr, 16)
-                out_tagoff(COLOR_ERROR)
-                QueueSet(Q_noName, self.cmd.ea)
+        elif op.type == o_near:
+            out_name_addr(op.addr)
+        elif op.type == o_mem:
+            if op.dtyp == dt_string:
+                symbols = self.get_string_symbols(op.addr)
+                if not symbols:
+                    out_line('""', COLOR_STRING)
+                elif len(symbols) == 1:
+                    symbol =  symbols[0]
+                    if symbol.is_reg():
+                        out_register(self.regNames[symbols[0].nvar])
+                    elif symbol.is_var():
+                        var_addr = self.rebase_var_addr(symbol.nvar)
+                        out_name_addr(var_addr)
+                    elif symbol.is_string() and \
+                            all(c in string.digits for c in symbol):
+                        OutLong(int(symbol), 10)
+                    else:
+                        out_name_addr(op.addr)
+                else:
+                    out_name_addr(op.addr)
+            else:
+                out_name_addr(op.addr)
         else:
             return False
         return True
@@ -229,7 +260,7 @@ class NsisProcessor(processor_t):
             op.reg = x
         else:
             op.type = o_mem
-            op.dtyp = dt_string
+            op.dtyp = dt_byte
             op.addr = self.rebase_var_addr(x)
 
     def op_jmp(self, op, addr):
@@ -279,6 +310,11 @@ class NsisProcessor(processor_t):
             return self.itype_IFERRORS
         return opcode
 
+    def virt_strcpy(self, opcode, params):
+        if params[2] == 0 and params[3] == 0:
+            return self.itype_ASSIGNVAR
+        return opcode
+
     def init_instructions(self):
         class idef:
             def __init__(self, name, cf=0, d='', v=None):
@@ -314,15 +350,17 @@ class NsisProcessor(processor_t):
             notimplemented(17),
             notimplemented(18),
             notimplemented(19),
-            idef(name='EXTRACTFILE', d='ISIIII', \
+            idef(name='EXTRACTFILE', d='ISIIII',
                  cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x14
             notimplemented(21),
             notimplemented(22),
             notimplemented(23),
-            notimplemented(24),
-            idef(name='ASSIGNVAR', d='VSII', \
+            idef(name='STRLEN', d='VS', v=self.virt_setflag,
+                 cf=CF_CHG1|CF_USE2), # 0x18
+            idef(name='STRCPY', d='VSSS', v=self.virt_strcpy,
                  cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x19
-            notimplemented(26),
+            idef(name='STRCMP', d='SSJJI',
+                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x1a
             notimplemented(27),
             notimplemented(28),
             notimplemented(29),
@@ -339,6 +377,7 @@ class NsisProcessor(processor_t):
             idef(name='EXCH', d='I', cf=CF_USE1|CF_CHG1),
             idef(name='CLEARERRORS'),
             idef(name='IFERRORS', d='J', cf=CF_USE1),
+            idef(name='ASSIGNVAR', d='VS', cf=CF_CHG1|CF_USE2),
         ]
 
         # Now create an instruction table compatible with IDA processor module requirements
