@@ -91,6 +91,11 @@ class NsisProcessor(processor_t):
         'a_sizeof_fmt': 'size %s',
     } # Assembler.
 
+    INTOP_SYM = ['+','-','*','/','|','&','^','!','||','&&','%','<<','>>']
+
+    # NSIS specific flags.
+    FLo_INTOP = 1
+
     def rebase_string_addr(self, addr):
         seg = get_segm_by_name('STRINGS')
         return addr + seg.startEA
@@ -181,7 +186,7 @@ class NsisProcessor(processor_t):
             QueueSet(Q_jumps, self.cmd.ea)
 
         # Add flow cref.
-        if not (feature & CF_STOP):
+        if not (feature & CF_STOP) and self.cmd.itype != self.itype_JMP:
             ua_add_cref(0, self.cmd.ea + self.cmd.size, fl_F)
 
         return 1
@@ -205,17 +210,20 @@ class NsisProcessor(processor_t):
     def outop(self, op):
         """ Output instruction's operand in textform. """
         def out_name_addr(addr):
-            r = out_name_expr(op, addr, addr)
+            r = out_name_expr(op, addr, BADADDR)
             if not r:
                 out_tagon(COLOR_ERROR)
-                OutLong(addr, 16)
+                OutLong(op.addr, 16)
                 out_tagoff(COLOR_ERROR)
                 QueueSet(Q_noName, self.cmd.ea)
 
         if op.type == o_reg:
             out_register(self.regNames[op.reg])
         elif op.type == o_imm:
-            OutValue(op, OOFW_IMM)
+            if op.specval & self.FLo_INTOP:
+                out_line(self.INTOP_SYM[op.value], COLOR_SYMBOL)
+            else:
+                OutValue(op, OOFW_IMM)
         elif op.type == o_near:
             out_name_addr(op.addr)
         elif op.type == o_mem:
@@ -223,20 +231,21 @@ class NsisProcessor(processor_t):
                 symbols = self.get_string_symbols(op.addr)
                 if not symbols:
                     out_line('""', COLOR_STRING)
-                elif len(symbols) == 1:
-                    symbol =  symbols[0]
+
+                for i, symbol in enumerate(symbols):
                     if symbol.is_reg():
-                        out_register(self.regNames[symbols[0].nvar])
+                        out_register(self.regNames[symbol.nvar])
                     elif symbol.is_var():
                         var_addr = self.rebase_var_addr(symbol.nvar)
-                        out_name_addr(var_addr)
+                        out_name_expr(op, var_addr, var_addr)
                     elif symbol.is_string() and \
                             all(c in string.digits for c in symbol):
                         OutLong(int(symbol), 10)
                     else:
-                        out_name_addr(op.addr)
-                else:
-                    out_name_addr(op.addr)
+                        out_line('"' + str(symbol) + '"', COLOR_STRING)
+
+                    if i > 0:
+                        OutChar(' ')
             else:
                 out_name_addr(op.addr)
         else:
@@ -288,6 +297,9 @@ class NsisProcessor(processor_t):
                     self.op_jmp(op, p)
                 else:
                     self.op_imm(op, p)
+            elif c == 'O': # Math operand.
+                self.op_imm(op, p)
+                op.specval |= self.FLo_INTOP
             else:
                 return False
         return True
@@ -330,7 +342,7 @@ class NsisProcessor(processor_t):
         self.itable = [
             i_invalid, # 0x00
             idef(name='RETURN', d='', cf=CF_STOP), # 0x01
-            notimplemented(2), # 0x02
+            idef(name='JMP', d='J', cf=CF_USE1), # 0x02
             idef(name='ABORT', d='I', cf=CF_USE1|CF_STOP), # 0x03
             notimplemented(4), # 0x04
             idef(name='CALL', d='J', cf=CF_USE1|CF_CALL), # 0x05
@@ -361,10 +373,12 @@ class NsisProcessor(processor_t):
                  cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x19
             idef(name='STRCMP', d='SSJJI',
                  cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x1a
-            notimplemented(27),
-            notimplemented(28),
-            notimplemented(29),
-            notimplemented(30),
+            notimplemented(27), # 0x1b
+            idef(name='INTCMP', d='SSJJJI',
+                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x1c
+            idef(name='INTOP', d='VSSO',
+                 cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x1d
+            notimplemented(30), # 0x1e
             idef(name='PUSHPOP', v=self.virt_pushpop), # 0x1f
         ]
 
@@ -378,6 +392,7 @@ class NsisProcessor(processor_t):
             idef(name='CLEARERRORS'),
             idef(name='IFERRORS', d='J', cf=CF_USE1),
             idef(name='ASSIGNVAR', d='VS', cf=CF_CHG1|CF_USE2),
+            idef(name='NOP')
         ]
 
         # Now create an instruction table compatible with IDA processor module requirements
