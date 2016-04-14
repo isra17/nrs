@@ -3,13 +3,19 @@ import idaapi
 import struct
 import nrs
 
-def is_number_str(sym):
+def str_to_number(sym):
     if not sym.is_string():
-        return False
-    s = str(sym)
-    if s[0] == '-':
-        s = s[1:]
-    return all(c in string.digits for c in s)
+        return None
+
+    try:
+        if sym[:2] == '0x':
+            return int(sym, 16)
+        elif sym[0] == '0':
+            return int(sym, 8)
+        else:
+            return int(sym)
+    except:
+        return None
 
 class NsisProcessor(processor_t):
     """ NSIS Processor class used by IDA to disassemble and analyze NSIS code. """
@@ -246,10 +252,12 @@ class NsisProcessor(processor_t):
                     elif symbol.is_var():
                         var_addr = self.rebase_var_addr(symbol.nvar)
                         out_name_expr(op, var_addr, var_addr)
-                    elif is_number_str(symbol):
-                        out_line(symbol, COLOR_NUMBER)
                     else:
-                        out_line('"' + str(symbol) + '"', COLOR_STRING)
+                        n = str_to_number(symbol)
+                        if n is None:
+                            out_line('"' + str(symbol) + '"', COLOR_STRING)
+                        else:
+                            out_line(symbol, COLOR_NUMBER)
 
                     if i > 0:
                         OutChar(' ')
@@ -274,6 +282,10 @@ class NsisProcessor(processor_t):
         if x < 20:
             op.type = o_reg
             op.reg = x
+        elif x == 0xffffffff:
+            op.type = o_imm
+            op.dtyp = dt_dword
+            op.value = -1
         else:
             op.type = o_mem
             op.dtyp = dt_byte
@@ -307,6 +319,8 @@ class NsisProcessor(processor_t):
             elif c == 'O': # Math operand.
                 self.op_imm(op, p)
                 op.specval |= self.FLo_INTOP
+            elif c == '2': # SendMessage bitshift one of its operant.
+                self.op_imm(op, p >> 2)
             else:
                 return False
         return True
@@ -333,6 +347,38 @@ class NsisProcessor(processor_t):
         if params[2] == 0 and params[3] == 0:
             return self.itype_ASSIGNVAR
         return opcode
+
+    def virt_showwindow(self, opcode, params):
+        if params[2]:
+            return self.itype_HIDEWINDOW
+        elif params[3]:
+            return self.itype_ENABLEWINDOW
+        return opcode
+
+    def virt_delreg(self, opcode, params):
+        if params[4]:
+            return self.itype_DELETEREGKEY
+        return self.itype_DELETEREGVALUE
+
+    def virt_regenum(self, opcode, params):
+        if params[4]:
+            return self.itype_REGENUMKEY
+        return self.itype_REGENUMVALUE
+
+    def virt_fwrite(self, opcode, params):
+        if params[2]:
+            return self.itype_FILEWRITEBYTE
+        return self.itype_FILEWRITE
+
+    def virt_fread(self, opcode, params):
+        if params[3]:
+            return self.itype_FILEREADBYTE
+        return self.itype_FILEREAD
+
+    def virt_log(self, opcode, params):
+        if params[0]:
+            return self.itype_LOGSET
+        return self.itype_LOGTEXT
 
     def init_instructions(self):
         class idef:
@@ -379,17 +425,43 @@ class NsisProcessor(processor_t):
             idef(name='IntOp', d='VSSO', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x1d
             idef(name='IntFmt', d='VSS', cf=CF_CHG1|CF_USE2|CF_USE3), # 0x1d
             idef(name='PushPop', v=self.virt_pushpop), # 0x1f
-            notimplemented(0x20),
-            notimplemented(0x21),
-            notimplemented(0x22),
-            notimplemented(0x23),
-            notimplemented(0x24),
-            notimplemented(0x25),
-            idef(name='CreateFont', d='VSSSI', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x29
-            notimplemented(0x27),
-            notimplemented(0x28),
+            idef(name='FindWindow', d='VSSSS', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x20
+            idef(name='SendMessage', d='VSSSS2', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x21
+            idef(name='IfWindow', d='SJJ', cf=CF_USE1|CF_USE2|CF_USE3), # 0x22
+            idef(name='GetDlgItem', d='VSS', cf=CF_CHG1|CF_USE2|CF_USE3), # 0x23
+            idef(name='SetCtlColors', d='SI', cf=CF_USE1|CF_USE2), # 0x24
+            idef(name='SetBrandingImage', d='SII', cf=CF_USE1|CF_USE2), # 0x25
+            idef(name='CreateFont', d='VSSSI', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x26
+            idef(name='ShowWindow', d='SS', v=self.virt_showwindow, cf=CF_USE1|CF_USE2), # 0x27
+            idef(name='ShellExec', d='SSSS', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x28
             idef(name='Execute', d='SII', cf=CF_USE1|CF_USE2|CF_USE3), # 0x29
-            notimplemented(0x2a),
+            idef(name='GetFileTime', d='VVS', cf=CF_CHG1|CF_CHG2|CF_USE3), # 0x2a
+            idef(name='GetDLLVersion', d='VVS', cf=CF_CHG1|CF_CHG2|CF_USE3), # 0x2b
+            idef(name='RegisterDLL', d='SSSI', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x2c
+            idef(name='CreateShortcut', d='SSSSS', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x2d
+            idef(name='CopyFiles', d='SSS', cf=CF_USE1|CF_USE2|CF_USE3), # 0x2e
+            idef(name='Reboot'), # 0x2f
+            idef(name='WriteIni', d='SSSS', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x30
+            idef(name='ReadIni', d='VSSS', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x31
+            idef(name='DeleteRegKey', d='ISSS', v=self.virt_delreg, cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x32
+            idef(name='WriteRegValue', d='ISSII', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x33
+            idef(name='ReadRegValue', d='VISSI', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x34
+            idef(name='RegEnumKey', d='VISS', v=self.virt_regenum, cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x35
+            idef(name='FileClose', d='V', cf=CF_USE1), # 0x36
+            idef(name='FileOpen', d='VIIS', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x37
+            idef(name='FileWrite', d='VS', v=self.virt_fwrite, cf=CF_USE1|CF_USE2), # 0x38
+            idef(name='FileRead', d='VVS', v=self.virt_fread, cf=CF_USE1|CF_CHG2|CF_USE3), # 0x39
+            idef(name='FileSeek', d='VVSI', cf=CF_USE1|CF_CHG2|CF_USE3|CF_USE4), # 0x3a
+            idef(name='FindClose', d='V', cf=CF_USE1), # 0x3b
+            idef(name='FindNext', d='VV', cf=CF_CHG1|CF_USE2), # 0x3c
+            idef(name='FindFirst', d='VVS', cf=CF_CHG1|CF_CHG2|CF_USE3), # 0x3d
+            idef(name='WriteUninstaller', d='SIIS', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x3e
+            idef(name='LogText', d='S', v=self.virt_log, cf=CF_USE1), # 0x3f
+            idef(name='SectionSet', d='SII', cf=CF_USE1|CF_USE2|CF_USE3), # 0x40
+            idef(name='InstTypeSet', d='SIII', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x41
+            idef(name='GetLabelAddr'), # 0x42
+            idef(name='GetFunctionAddr'), # 0x43
+            idef(name='LockWindow', d='I', cf=CF_USE1), # 0x44
         ]
 
         self.itable += [idef(name='Invalid'+hex(i))
@@ -402,7 +474,13 @@ class NsisProcessor(processor_t):
             idef(name='ClearErrors'),
             idef(name='IfErrors', d='J', cf=CF_USE1),
             idef(name='AssignVar', d='VS', cf=CF_CHG1|CF_USE2),
-            idef(name='Nop')
+            idef(name='EnableWindow', d='SS', cf=CF_USE1|CF_USE2),
+            idef(name='HideWindow', d='SS', cf=CF_USE1|CF_USE2),
+            idef(name='DeleteRegValue', d='ISSS', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4),
+            idef(name='RegEnumValue', d='VISS', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4),
+            idef(name='FileWriteByte', d='VS', cf=CF_USE1|CF_USE2),
+            idef(name='FileReadByte', d='VV', cf=CF_USE1|CF_CHG2),
+            idef(name='LogSet', d='I', cf=CF_USE1),
         ]
 
         # Now create an instruction table compatible with IDA processor module requirements
