@@ -3,7 +3,6 @@
 from builtins import bytes
 from nrs.nsisfile import NSIS, HeaderNotFound
 from nrs import fileform, strings
-import pefile
 import sys
 import os
 

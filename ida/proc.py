@@ -108,7 +108,10 @@ class NsisProcessor(processor_t):
     INTOP_SYM = ['+','-','*','/','|','&','^','!','||','&&','%','<<','>>']
 
     # NSIS specific flags.
-    FLo_INTOP = 1
+    FLo_INTOP = 0x01
+
+    FLa_CheckNoFlow = 0x01
+    FLa_NoFlow =      0x02
 
     def rebase_string_addr(self, addr):
         seg = get_segm_by_name('STRINGS')
@@ -164,6 +167,7 @@ class NsisProcessor(processor_t):
             ins = self.itable[opcode]
 
         self.cmd.itype = opcode
+        self.cmd.auxpref |= ins.ap
         return self.cmd.size if self.decode(ins.d, params) else 0
 
     def emu(self):
@@ -200,7 +204,8 @@ class NsisProcessor(processor_t):
             QueueSet(Q_jumps, self.cmd.ea)
 
         # Add flow cref.
-        if not (feature & CF_STOP) and self.cmd.itype != self.itype_JMP:
+        noFlow = self.get_auxpref() & self.FLa_NoFlow
+        if not (feature & CF_STOP or noFlow):
             ua_add_cref(0, self.cmd.ea + self.cmd.size, fl_F)
 
         return 1
@@ -303,6 +308,12 @@ class NsisProcessor(processor_t):
             self.op_void(self.cmd.Op1)
             return True
 
+        noFlow = False
+        # Most instruction with jumps can lead to no flow reference if no
+        # jumps address are set to 0.
+        if 'J' in fmt and self.cmd.auxpref & self.FLa_CheckNoFlow:
+            noFlow = True
+
         for i, (c,p) in enumerate(zip(fmt, params)):
             op = self.cmd[i]
             if c == 'I':
@@ -316,13 +327,17 @@ class NsisProcessor(processor_t):
                     self.op_jmp(op, p)
                 else:
                     self.op_imm(op, p)
+                    noFlow = False
             elif c == 'O': # Math operand.
                 self.op_imm(op, p)
                 op.specval |= self.FLo_INTOP
             elif c == '2': # SendMessage bitshift one of its operant.
                 self.op_imm(op, p >> 2)
             else:
-                return False
+                raise Exception('Unknown format flag: ' + c)
+
+        if noFlow:
+            self.cmd.auxpref |= self.FLa_NoFlow
         return True
 
     def virt_pushpop(self, opcode, params):
@@ -382,11 +397,12 @@ class NsisProcessor(processor_t):
 
     def init_instructions(self):
         class idef:
-            def __init__(self, name, cf=0, d='', v=None):
+            def __init__(self, name, cf=0, d='', v=None, ap=0):
                 self.name = name
                 self.cf = cf
                 self.d = d
                 self.v = v
+                self.ap = ap
 
         i_invalid = idef(name='INVALID')
         def notimplemented(n):
@@ -395,7 +411,7 @@ class NsisProcessor(processor_t):
         self.itable = [
             i_invalid, # 0x00
             idef(name='Return', d='', cf=CF_STOP), # 0x01
-            idef(name='Jmp', d='J', cf=CF_USE1), # 0x02
+            idef(name='Jmp', d='J', cf=CF_USE1, ap=self.FLa_CheckNoFlow), # 0x02
             idef(name='Abort', d='I', cf=CF_USE1|CF_STOP), # 0x03
             idef(name='Quit', cf=CF_STOP), #0x04
             idef(name='Call', d='J', cf=CF_USE1|CF_CALL), # 0x05
@@ -405,9 +421,9 @@ class NsisProcessor(processor_t):
             idef(name='ChDetailsView', d='SS', cf=CF_USE1|CF_USE2), # 0x09
             idef(name='SetFileAttributes', d='SI', cf=CF_USE1|CF_USE2), # 0x0a
             idef(name='CreateDir', d='SI', cf=CF_USE1|CF_USE2), # 0x0b
-            idef(name='IfFileExists', d='SJJ', cf=CF_USE1|CF_USE2|CF_USE3), # 0x0c
+            idef(name='IfFileExists', d='SJJ', cf=CF_USE1|CF_USE2|CF_USE3, ap=self.FLa_CheckNoFlow), # 0x0c
             idef(name='SetFlag', d='IS', v=self.virt_setflag, cf=CF_USE1|CF_USE2), # 0x0d
-            idef(name='IfFlag', d='JJII',v=self.virt_ifflag, cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x0e
+            idef(name='IfFlag', d='JJII',v=self.virt_ifflag, cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4, ap=self.FLa_CheckNoFlow), # 0x0e
             idef(name='GetFlag', d='VI', cf=CF_CHG1|CF_USE2), # 0x0f
             idef(name='Rename', d='SSIS', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x10
             idef(name='GetFullPathName', d='SVI', cf=CF_USE1|CF_CHG2|CF_USE3), # 0x11
@@ -419,15 +435,15 @@ class NsisProcessor(processor_t):
             idef(name='RmDir', d='SI', cf=CF_USE1|CF_USE2), # 0x17
             idef(name='StrLe', d='VS', v=self.virt_setflag, cf=CF_CHG1|CF_USE2), # 0x18
             idef(name='StrCpy', d='VSSS', v=self.virt_strcpy, cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x19
-            idef(name='StrCmp', d='SSJJI', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x1a
+            idef(name='StrCmp', d='SSJJI', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5, ap=self.FLa_CheckNoFlow), # 0x1a
             idef(name='ReadEnv', d='VSI', cf=CF_CHG1|CF_USE2|CF_USE3), # 0x1b
-            idef(name='IntCmp', d='SSJJJI', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x1c
+            idef(name='IntCmp', d='SSJJJI', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6, ap=self.FLa_CheckNoFlow), # 0x1c
             idef(name='IntOp', d='VSSO', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x1d
             idef(name='IntFmt', d='VSS', cf=CF_CHG1|CF_USE2|CF_USE3), # 0x1d
             idef(name='PushPop', v=self.virt_pushpop), # 0x1f
             idef(name='FindWindow', d='VSSSS', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x20
             idef(name='SendMessage', d='VSSSS2', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x21
-            idef(name='IfWindow', d='SJJ', cf=CF_USE1|CF_USE2|CF_USE3), # 0x22
+            idef(name='IsWindow', d='SJJ', cf=CF_USE1|CF_USE2|CF_USE3, ap=self.FLa_CheckNoFlow), # 0x22
             idef(name='GetDlgItem', d='VSS', cf=CF_CHG1|CF_USE2|CF_USE3), # 0x23
             idef(name='SetCtlColors', d='SI', cf=CF_USE1|CF_USE2), # 0x24
             idef(name='SetBrandingImage', d='SII', cf=CF_USE1|CF_USE2), # 0x25

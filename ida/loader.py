@@ -4,6 +4,8 @@ import string
 import nrs
 from nrs import fileform, nsisfile
 
+PTR_NONE = 0xffffffff
+
 BLOCKS = [
     ('PAGES', fileform.NB_PAGES, 'DATA'),
     ('SECTIONS', fileform.NB_SECTIONS, 'DATA'),
@@ -60,15 +62,36 @@ def load_file(li, netflags, format):
     for i, v in enumerate(nrs.strings.SYSVAR_NAMES.values()):
         idaapi.do_name_anyway(var_seg.startEA + i + 20, '$' + v)
 
-    # Create sections functions.
     code_base = nsis.header.blocks[fileform.NB_ENTRIES].offset
+    # Create sections functions.
     for i, section in enumerate(nsis.sections):
+        if section.code == PTR_NONE:
+            continue
         name = nsis.get_string(section.name_ptr)
         if not name:
             name = '_section' + str(i)
         ea = code_base + nrs.entry_to_offset(section.code)
         cname = canonize_name(name)
         AddEntryPoint(ea, ea, cname, 1)
+
+    # Mark pages handlers.
+    for i, page in enumerate(nsis.pages):
+        for fn in ['prefunc', 'showfunc', 'leavefunc']:
+            addr = getattr(page, fn)
+            if addr != PTR_NONE:
+                name = '_page_{}_{}'.format(i, fn)
+                ea = code_base + nrs.entry_to_offset(addr)
+                AddEntryPoint(ea, ea, name, 1)
+
+    # Mark installer handlers.
+    for event in ['Init', 'InstSuccess', 'InstFailed', 'UserAbort', 'GUIInit',
+                  'GUIEnd', 'MouseOverSection', 'VerifyInstDir', 'SelChange',
+                  'RebootFailed']:
+        addr = getattr(nsis.header, 'code_on'+event)
+        if addr != PTR_NONE:
+            name = '_on' + event
+            ea = code_base + nrs.entry_to_offset(addr)
+            AddEntryPoint(ea, ea, name, 1)
 
     # Create strings.
     strings_data = nsis.block(fileform.NB_STRINGS)
