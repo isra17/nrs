@@ -3,6 +3,14 @@ import idaapi
 import struct
 import nrs
 
+def is_number_str(sym):
+    if not sym.is_string():
+        return False
+    s = str(sym)
+    if s[0] == '-':
+        s = s[1:]
+    return all(c in string.digits for c in s)
+
 class NsisProcessor(processor_t):
     """ NSIS Processor class used by IDA to disassemble and analyze NSIS code. """
     # IDP id (Chosen arbitrarily > 0x8000).
@@ -238,9 +246,8 @@ class NsisProcessor(processor_t):
                     elif symbol.is_var():
                         var_addr = self.rebase_var_addr(symbol.nvar)
                         out_name_expr(op, var_addr, var_addr)
-                    elif symbol.is_string() and \
-                            all(c in string.digits for c in symbol):
-                        OutLong(int(symbol), 10)
+                    elif is_number_str(symbol):
+                        out_line(symbol, COLOR_NUMBER)
                     else:
                         out_line('"' + str(symbol) + '"', COLOR_STRING)
 
@@ -341,58 +348,61 @@ class NsisProcessor(processor_t):
 
         self.itable = [
             i_invalid, # 0x00
-            idef(name='RETURN', d='', cf=CF_STOP), # 0x01
-            idef(name='JMP', d='J', cf=CF_USE1), # 0x02
-            idef(name='ABORT', d='I', cf=CF_USE1|CF_STOP), # 0x03
-            notimplemented(4), # 0x04
-            idef(name='CALL', d='J', cf=CF_USE1|CF_CALL), # 0x05
-            notimplemented(6), # 0x06
-            notimplemented(7), # 0x07
-            notimplemented(8), # 0x08
-            notimplemented(9), # 0x09
-            notimplemented(10), # 0x0a
-            idef(name='CREATEDIR', d='SI', cf=CF_USE1|CF_USE2), # 0x0b
-            notimplemented(12), # 0x0c
-            idef(name='SETFLAG', d='II', v=self.virt_setflag,
-                 cf=CF_USE1|CF_USE2), # 0x0d
-            idef(name='IFFLAG', d='JJII',v=self.virt_ifflag,
-                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x0e
-            notimplemented(15),
-            notimplemented(16),
-            notimplemented(17),
-            notimplemented(18),
-            notimplemented(19),
-            idef(name='EXTRACTFILE', d='ISIIII',
-                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x14
-            notimplemented(21),
-            notimplemented(22),
-            notimplemented(23),
-            idef(name='STRLEN', d='VS', v=self.virt_setflag,
-                 cf=CF_CHG1|CF_USE2), # 0x18
-            idef(name='STRCPY', d='VSSS', v=self.virt_strcpy,
-                 cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x19
-            idef(name='STRCMP', d='SSJJI',
-                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x1a
-            notimplemented(27), # 0x1b
-            idef(name='INTCMP', d='SSJJJI',
-                 cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x1c
-            idef(name='INTOP', d='VSSO',
-                 cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x1d
-            notimplemented(30), # 0x1e
-            idef(name='PUSHPOP', v=self.virt_pushpop), # 0x1f
+            idef(name='Return', d='', cf=CF_STOP), # 0x01
+            idef(name='Jmp', d='J', cf=CF_USE1), # 0x02
+            idef(name='Abort', d='I', cf=CF_USE1|CF_STOP), # 0x03
+            idef(name='Quit', cf=CF_STOP), #0x04
+            idef(name='Call', d='J', cf=CF_USE1|CF_CALL), # 0x05
+            idef(name='UpdateText', d='S', cf=CF_USE1), # 0x06
+            idef(name='Sleep', d='I', cf=CF_USE1), # 0x07
+            idef(name='BringToFront'), # 0x08
+            idef(name='ChDetailsView', d='SS', cf=CF_USE1|CF_USE2), # 0x09
+            idef(name='SetFileAttributes', d='SI', cf=CF_USE1|CF_USE2), # 0x0a
+            idef(name='CreateDir', d='SI', cf=CF_USE1|CF_USE2), # 0x0b
+            idef(name='IfFileExists', d='SJJ', cf=CF_USE1|CF_USE2|CF_USE3), # 0x0c
+            idef(name='SetFlag', d='IS', v=self.virt_setflag, cf=CF_USE1|CF_USE2), # 0x0d
+            idef(name='IfFlag', d='JJII',v=self.virt_ifflag, cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4), # 0x0e
+            idef(name='GetFlag', d='VI', cf=CF_CHG1|CF_USE2), # 0x0f
+            idef(name='Rename', d='SSIS', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x10
+            idef(name='GetFullPathName', d='SVI', cf=CF_USE1|CF_CHG2|CF_USE3), # 0x11
+            idef(name='SearchPath', d='VS', cf=CF_CHG1|CF_USE2), # 0x12
+            idef(name='GetTempFilename', d='VS', cf=CF_CHG1|CF_USE2), # 0x13
+            idef(name='ExtractFile', d='ISIIII', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x14
+            idef(name='DeleteFile', d='SI', cf=CF_USE1|CF_USE2), # 0x15
+            idef(name='MessageBox', d='ISIJIJ', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x16
+            idef(name='RmDir', d='SI', cf=CF_USE1|CF_USE2), # 0x17
+            idef(name='StrLe', d='VS', v=self.virt_setflag, cf=CF_CHG1|CF_USE2), # 0x18
+            idef(name='StrCpy', d='VSSS', v=self.virt_strcpy, cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x19
+            idef(name='StrCmp', d='SSJJI', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x1a
+            idef(name='ReadEnv', d='VSI', cf=CF_CHG1|CF_USE2|CF_USE3), # 0x1b
+            idef(name='IntCmp', d='SSJJJI', cf=CF_USE1|CF_USE2|CF_USE3|CF_USE4|CF_USE5|CF_USE6), # 0x1c
+            idef(name='IntOp', d='VSSO', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4), # 0x1d
+            idef(name='IntFmt', d='VSS', cf=CF_CHG1|CF_USE2|CF_USE3), # 0x1d
+            idef(name='PushPop', v=self.virt_pushpop), # 0x1f
+            notimplemented(0x20),
+            notimplemented(0x21),
+            notimplemented(0x22),
+            notimplemented(0x23),
+            notimplemented(0x24),
+            notimplemented(0x25),
+            idef(name='CreateFont', d='VSSSI', cf=CF_CHG1|CF_USE2|CF_USE3|CF_USE4|CF_USE5), # 0x29
+            notimplemented(0x27),
+            notimplemented(0x28),
+            idef(name='Execute', d='SII', cf=CF_USE1|CF_USE2|CF_USE3), # 0x29
+            notimplemented(0x2a),
         ]
 
         self.itable += [idef(name='Invalid'+hex(i))
                             for i in range(len(self.itable),100)]
 
         self.itable += [
-            idef(name='PUSH', d='S', cf=CF_USE1),
-            idef(name='POP', d='V', cf=CF_CHG1),
-            idef(name='EXCH', d='I', cf=CF_USE1|CF_CHG1),
-            idef(name='CLEARERRORS'),
-            idef(name='IFERRORS', d='J', cf=CF_USE1),
-            idef(name='ASSIGNVAR', d='VS', cf=CF_CHG1|CF_USE2),
-            idef(name='NOP')
+            idef(name='Push', d='S', cf=CF_USE1),
+            idef(name='Pop', d='V', cf=CF_CHG1),
+            idef(name='Exch', d='I', cf=CF_USE1|CF_CHG1),
+            idef(name='ClearErrors'),
+            idef(name='IfErrors', d='J', cf=CF_USE1),
+            idef(name='AssignVar', d='VS', cf=CF_CHG1|CF_USE2),
+            idef(name='Nop')
         ]
 
         # Now create an instruction table compatible with IDA processor module requirements
@@ -400,7 +410,7 @@ class NsisProcessor(processor_t):
         for i, x in enumerate(self.itable):
             d = dict(name=x.name, feature=x.cf)
             instructions.append(d)
-            setattr(self, 'itype_' + x.name, i)
+            setattr(self, 'itype_' + x.name.upper(), i)
 
         # icode of the last instruction + 1
         self.instruc_end = len(instructions) + 1
