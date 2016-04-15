@@ -94,6 +94,7 @@ def load_file(li, netflags, format):
             AddEntryPoint(ea, ea, name, 1)
 
     # Create strings.
+    """
     strings_data = nsis.block(fileform.NB_STRINGS)
     strings_off = nsis.header.blocks[fileform.NB_STRINGS].offset
     i = 0
@@ -106,6 +107,7 @@ def load_file(li, netflags, format):
         idaapi.set_cmt(strings_off + i, decoded_string, True)
         idaapi.do_name_anyway(strings_off + i, string_name)
         i += length
+    #"""
 
 
     # Set processor to nsis script.

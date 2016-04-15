@@ -1,7 +1,13 @@
 from idaapi import *
 import idaapi
 import struct
+import string
 import nrs
+
+allowed_name_char = string.ascii_letters + string.digits + '$'
+def canonize_name(name):
+    """ Limit names to a subset of ascii character. """
+    return str(''.join([c if c in allowed_name_char else '_' for c in name]))
 
 def str_to_number(sym):
     if not sym.is_string():
@@ -16,6 +22,8 @@ def str_to_number(sym):
             return int(sym)
     except:
         return None
+
+STR_LANG_FLAG = 1 << 31
 
 class NsisProcessor(processor_t):
     """ NSIS Processor class used by IDA to disassemble and analyze NSIS code. """
@@ -114,6 +122,8 @@ class NsisProcessor(processor_t):
     FLa_NoFlow =      0x02
 
     def rebase_string_addr(self, addr):
+        if addr & STR_LANG_FLAG:
+            return addr
         seg = get_segm_by_name('STRINGS')
         return addr + seg.startEA
 
@@ -127,29 +137,30 @@ class NsisProcessor(processor_t):
 
     def get_string_symbols(self, addr):
         seg = get_segm_by_name('STRINGS')
+        if not seg.contains(addr):
+            return None
+
+        seg = get_segm_by_name('STRINGS')
         maxlen = min(seg.endEA - addr, nrs.fileform.NSIS_MAX_STRLEN)
         data = GetManyBytes(addr, maxlen)
         symbols, _ = nrs.strings.symbolize(data, 0, self.nsis_version)
         return symbols
 
+    def get_string(self, addr):
+        seg = get_segm_by_name('STRINGS')
+        if not seg.contains(addr):
+            return None, 0
+
+        maxlen = min(seg.endEA - addr, nrs.fileform.NSIS_MAX_STRLEN)
+        data = GetManyBytes(addr, maxlen)
+        string, l = nrs.strings.decode(data, 0, self.nsis_version)
+        return str(string), l
+
     def get_frame_retsize(self):
         return 4
 
     def header(self):
-        return
-
-    def handle_operand(self, op, isRead):
-        dref_flag = dr_R if isRead else dr_W
-        offb = (op.n+1)*4
-
-        if op.type == o_mem:
-            ua_add_dref(offb, op.addr, dref_flag)
-        elif op.type == o_near:
-            if self.cmd.itype == self.itype_CALL:
-                fl = fl_CN
-            else:
-                fl = fl_JN
-            ua_add_cref(offb, op.addr, fl)
+        return 'NSIS Script V' + str(self.nsis_version)
 
     def ana(self):
         """ Decode NSIS instruction. """
@@ -169,6 +180,39 @@ class NsisProcessor(processor_t):
         self.cmd.itype = opcode
         self.cmd.auxpref |= ins.ap
         return self.cmd.size if self.decode(ins.d, params) else 0
+
+    def handle_operand(self, op, isRead):
+        dref_flag = dr_R if isRead else dr_W
+        offb = (op.n+1)*4
+
+        if op.type == o_mem:
+            if op.dtyp == dt_string:
+                sym_addr = op.addr
+                symbols = self.get_string_symbols(op.addr)
+                if symbols:
+                    for i, symbol in enumerate(symbols):
+                        if symbol.is_var():
+                            var_addr = self.rebase_var_addr(symbol.nvar)
+                            ua_add_dref(offb, var_addr, dref_flag)
+                            sym_addr += 4
+                        elif symbol.is_string():
+                            n = str_to_number(symbol)
+                            if n is None:
+                                ua_add_dref(offb, sym_addr, dref_flag)
+                                string_name = canonize_name(symbol)
+                                idaapi.make_ascii_string(sym_addr, len(symbol), ASCSTR_C)
+                                idaapi.do_name_anyway(sym_addr, string_name[:15])
+                            sym_addr += len(symbol)
+                        else:
+                            sym_addr += 4
+            else:
+                ua_add_dref(offb, op.addr, dref_flag)
+        elif op.type == o_near:
+            if self.cmd.itype == self.itype_CALL:
+                fl = fl_CN
+            else:
+                fl = fl_JN
+            ua_add_cref(offb, op.addr, fl)
 
     def emu(self):
         """ Emulate instruction behavior. """
@@ -242,7 +286,7 @@ class NsisProcessor(processor_t):
             if op.specval & self.FLo_INTOP:
                 out_line(self.INTOP_SYM[op.value], COLOR_SYMBOL)
             else:
-                OutValue(op, OOFW_IMM)
+                OutValue(op, OOFW_IMM | OOF_SIGNED)
         elif op.type == o_near:
             out_name_addr(op.addr)
         elif op.type == o_mem:
@@ -262,10 +306,7 @@ class NsisProcessor(processor_t):
                         if n is None:
                             out_line('"' + str(symbol) + '"', COLOR_STRING)
                         else:
-                            out_line(symbol, COLOR_NUMBER)
-
-                    if i > 0:
-                        OutChar(' ')
+                            OutValue(op, OOFW_ADDR | OOF_SIGNED)
             else:
                 out_name_addr(op.addr)
         else:
@@ -274,9 +315,22 @@ class NsisProcessor(processor_t):
 
     # Instruction decoding functions.
     def op_str(self, op, addr):
+        # Some string are used as numbers, register or nvar.
+        addr = self.rebase_string_addr(addr)
+        symbols = self.get_string_symbols(addr)
+        if symbols and len(symbols) == 1:
+            symbol = symbols[0]
+            if symbol.is_nvar():
+                return self.op_var(op, symbol.nvar)
+            if symbol.is_string():
+                n = str_to_number(symbol)
+                if n is not None:
+                    return self.op_imm(op, n)
+
         op.type = o_mem
         op.dtyp = dt_string
-        op.addr = self.rebase_string_addr(addr)
+        op.addr = addr
+
 
     def op_imm(self, op, imm):
         op.type = o_imm
