@@ -259,8 +259,8 @@ class NsisProcessor(processor_t):
                 fl = fl_JN
             ua_add_cref(offb, op.addr, fl)
         elif op.type == o_imm and op.specval & self.FLa_StackArgs:
-            #print(self.get_plugin_call_args(self.cmd, op))
-            pass
+            for arg in self.get_plugin_call_args(self.cmd, op):
+                self.handle_string(0, op, arg)
 
     def emu(self):
         """ Emulate instruction behavior. """
@@ -346,7 +346,7 @@ class NsisProcessor(processor_t):
                     if n is None:
                         out_line('"' + str(symbol) + '"', COLOR_STRING)
                     else:
-                        OutLong(n, 16)
+                        out_long(n, 16)
 
     def out_name_addr(self, op, addr):
         r = out_name_expr(op, addr, BADADDR)
@@ -368,6 +368,9 @@ class NsisProcessor(processor_t):
                 args = self.get_plugin_call_args(self.cmd, op)
                 for i, arg in enumerate(args):
                     self.out_str(op, arg)
+                    if i > 0:
+                        out_symbol(',')
+                        OutChar(' ')
             else:
                 OutValue(op, OOFW_IMM | OOF_SIGNED)
         elif op.type == o_near:
