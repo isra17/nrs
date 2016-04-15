@@ -15,7 +15,7 @@ def test_non_nsis():
 def test_get_version():
     with open(EXAMPLE1_PATH, 'rb') as fd:
         nsis = nsisfile.NSIS(fd)
-        assert nsis.get_version() == '3.0b3'
+        assert nsis.version_major == '3'
 
 def test_get_string():
     with open(EXAMPLE1_PATH, 'rb') as fd:
