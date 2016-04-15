@@ -1,4 +1,5 @@
 from idaapi import *
+import ntpath
 import idaapi
 import struct
 import string
@@ -24,6 +25,8 @@ def str_to_number(sym):
         return None
 
 STR_LANG_FLAG = 1 << 31
+OP_SIZE = 4
+INST_SIZE = 7 * OP_SIZE
 
 class NsisProcessor(processor_t):
     """ NSIS Processor class used by IDA to disassemble and analyze NSIS code. """
@@ -116,10 +119,12 @@ class NsisProcessor(processor_t):
     INTOP_SYM = ['+','-','*','/','|','&','^','!','||','&&','%','<<','>>']
 
     # NSIS specific flags.
-    FLo_INTOP = 0x01
+    FLo_IntOp =       0x01
+    FLo_PluginCall =  0x02
 
-    FLa_CheckNoFlow = 0x01
-    FLa_NoFlow =      0x02
+    FLa_CheckNoFlow = 0x04
+    FLa_NoFlow =      0x08
+    FLa_StackArgs =   0x10
 
     def rebase_string_addr(self, addr):
         if addr & STR_LANG_FLAG:
@@ -156,6 +161,39 @@ class NsisProcessor(processor_t):
         string, l = nrs.strings.decode(data, 0, self.nsis_version)
         return str(string), l
 
+    def read_params(self):
+        return [ua_next_long() for _ in range(6)]
+
+    def decode_plugin_call(self, opcode, params):
+        if opcode != self.itype_CALL: return
+        if ua_next_long() != self.itype_EXTRACTFILE: return
+        self.read_params()
+        if ua_next_long() != self.itype_SETFLAG: return
+        self.read_params()
+        argn = 0
+        while True:
+            opcode = ua_next_long()
+            if opcode == self.itype_PUSHPOP and \
+                    self.read_params()[1:3] == [0,0]:
+                argn += 1
+            elif opcode == self.itype_REGISTERDLL:
+                # Plugin call!
+                params = self.read_params()
+                self.cmd.itype = self.itype_PLUGINCALL
+                self.op_str(self.cmd.Op1, params[0])
+                self.op_str(self.cmd.Op2, params[1])
+                self.op_imm(self.cmd.Op3, argn)
+                self.cmd.Op3.specval |= self.FLa_StackArgs
+                self.cmd.auxpref |= self.FLo_PluginCall
+                return True
+            else:
+                return
+
+    def get_plugin_call_args(self, cmd, op):
+        first = cmd.ea + INST_SIZE * 3
+        return [self.rebase_string_addr(Dword(first + OP_SIZE + i*INST_SIZE))
+                    for i in range(op.value)]
+
     def get_frame_retsize(self):
         return 4
 
@@ -165,7 +203,11 @@ class NsisProcessor(processor_t):
     def ana(self):
         """ Decode NSIS instruction. """
         opcode = ua_next_long()
-        params = [ua_next_long() for _ in range(6)]
+        params = self.read_params()
+
+        if self.decode_plugin_call(opcode, params):
+            return self.cmd.size
+        self.cmd.size = INST_SIZE
 
         if opcode < len(self.itable):
             ins = self.itable[opcode]
@@ -181,30 +223,33 @@ class NsisProcessor(processor_t):
         self.cmd.auxpref |= ins.ap
         return self.cmd.size if self.decode(ins.d, params) else 0
 
+    def handle_string(self, offb, op, addr):
+        sym_addr = addr
+        symbols = self.get_string_symbols(addr)
+        if symbols:
+            for i, symbol in enumerate(symbols):
+                if symbol.is_var():
+                    var_addr = self.rebase_var_addr(symbol.nvar)
+                    ua_add_dref(offb, var_addr, dr_R)
+                    sym_addr += 4
+                elif symbol.is_string():
+                    n = str_to_number(symbol)
+                    if n is None:
+                        ua_add_dref(offb, sym_addr, dr_R)
+                        string_name = canonize_name(symbol)
+                        idaapi.make_ascii_string(sym_addr, len(symbol), ASCSTR_C)
+                        idaapi.do_name_anyway(sym_addr, string_name[:15])
+                    sym_addr += len(symbol)
+                else:
+                    sym_addr += 4
+
     def handle_operand(self, op, isRead):
         dref_flag = dr_R if isRead else dr_W
-        offb = (op.n+1)*4
+        offb = (op.n+1)*OP_SIZE
 
         if op.type == o_mem:
             if op.dtyp == dt_string:
-                sym_addr = op.addr
-                symbols = self.get_string_symbols(op.addr)
-                if symbols:
-                    for i, symbol in enumerate(symbols):
-                        if symbol.is_var():
-                            var_addr = self.rebase_var_addr(symbol.nvar)
-                            ua_add_dref(offb, var_addr, dref_flag)
-                            sym_addr += 4
-                        elif symbol.is_string():
-                            n = str_to_number(symbol)
-                            if n is None:
-                                ua_add_dref(offb, sym_addr, dref_flag)
-                                string_name = canonize_name(symbol)
-                                idaapi.make_ascii_string(sym_addr, len(symbol), ASCSTR_C)
-                                idaapi.do_name_anyway(sym_addr, string_name[:15])
-                            sym_addr += len(symbol)
-                        else:
-                            sym_addr += 4
+                self.handle_string(offb, op, op.addr)
             else:
                 ua_add_dref(offb, op.addr, dref_flag)
         elif op.type == o_near:
@@ -213,6 +258,9 @@ class NsisProcessor(processor_t):
             else:
                 fl = fl_JN
             ua_add_cref(offb, op.addr, fl)
+        elif op.type == o_imm and op.specval & self.FLa_StackArgs:
+            #print(self.get_plugin_call_args(self.cmd, op))
+            pass
 
     def emu(self):
         """ Emulate instruction behavior. """
@@ -257,58 +305,78 @@ class NsisProcessor(processor_t):
     def out(self):
         """ Output instruction in textform. """
         buf = idaapi.init_output_buffer(1024)
-        OutMnem(12)
-        for i, op in ((i, self.cmd[i]) for i in range(6)):
-            if op.type == o_void:
-                break
-            if i > 0:
-                out_symbol(',')
-                OutChar(' ')
-            out_one_operand(i)
+
+        if self.cmd.auxpref & self.FLo_PluginCall:
+            lib,_ = self.get_string(self.cmd[0].addr)
+            fn,_ = self.get_string(self.cmd[1].addr)
+            lib = ntpath.splitext(ntpath.basename(lib))[0]
+            out_line('{}::{}'.format(lib, fn), COLOR_INSN)
+            OutChar(' ')
+            out_one_operand(2)
+        else:
+            OutMnem(12)
+            for i, op in ((i, self.cmd[i]) for i in range(6)):
+                if op.type == o_void:
+                    break
+                if i > 0:
+                    out_symbol(',')
+                    OutChar(' ')
+                out_one_operand(i)
 
         term_output_buffer()
         cvar.gl_comm = 1
         MakeLine(buf)
 
+    def out_str(self, op, addr):
+        symbols = self.get_string_symbols(addr)
+        # Translated string.
+        if symbols is None:
+            self.out_name_addr(op, addr)
+        elif not symbols:
+            out_line('""', COLOR_STRING)
+        else:
+            for i, symbol in enumerate(symbols):
+                if symbol.is_reg():
+                    out_register(self.regNames[symbol.nvar])
+                elif symbol.is_var():
+                    var_addr = self.rebase_var_addr(symbol.nvar)
+                    out_name_expr(op, var_addr, var_addr)
+                else:
+                    n = str_to_number(symbol)
+                    if n is None:
+                        out_line('"' + str(symbol) + '"', COLOR_STRING)
+                    else:
+                        OutLong(n, 16)
+
+    def out_name_addr(self, op, addr):
+        r = out_name_expr(op, addr, BADADDR)
+        if not r:
+            out_tagon(COLOR_ERROR)
+            OutLong(op.addr, 16)
+            out_tagoff(COLOR_ERROR)
+            QueueSet(Q_noName, self.cmd.ea)
+
     def outop(self, op):
         """ Output instruction's operand in textform. """
-        def out_name_addr(addr):
-            r = out_name_expr(op, addr, BADADDR)
-            if not r:
-                out_tagon(COLOR_ERROR)
-                OutLong(op.addr, 16)
-                out_tagoff(COLOR_ERROR)
-                QueueSet(Q_noName, self.cmd.ea)
 
         if op.type == o_reg:
             out_register(self.regNames[op.reg])
         elif op.type == o_imm:
-            if op.specval & self.FLo_INTOP:
+            if op.specval & self.FLo_IntOp:
                 out_line(self.INTOP_SYM[op.value], COLOR_SYMBOL)
+            elif op.specval & self.FLa_StackArgs:
+                args = self.get_plugin_call_args(self.cmd, op)
+                for i, arg in enumerate(args):
+                    self.out_str(op, arg)
             else:
                 OutValue(op, OOFW_IMM | OOF_SIGNED)
         elif op.type == o_near:
-            out_name_addr(op.addr)
+            self.out_name_addr(op, op.addr)
         elif op.type == o_mem:
             if op.dtyp == dt_string:
-                symbols = self.get_string_symbols(op.addr)
-                if not symbols:
-                    out_line('""', COLOR_STRING)
-
-                for i, symbol in enumerate(symbols):
-                    if symbol.is_reg():
-                        out_register(self.regNames[symbol.nvar])
-                    elif symbol.is_var():
-                        var_addr = self.rebase_var_addr(symbol.nvar)
-                        out_name_expr(op, var_addr, var_addr)
-                    else:
-                        n = str_to_number(symbol)
-                        if n is None:
-                            out_line('"' + str(symbol) + '"', COLOR_STRING)
-                        else:
-                            OutValue(op, OOFW_ADDR | OOF_SIGNED)
+                self.out_str(op, op.addr)
             else:
-                out_name_addr(op.addr)
+                self.out_name_addr(op, op.addr)
         else:
             return False
         return True
@@ -384,7 +452,7 @@ class NsisProcessor(processor_t):
                     noFlow = False
             elif c == 'O': # Math operand.
                 self.op_imm(op, p)
-                op.specval |= self.FLo_INTOP
+                op.specval |= self.FLo_IntOp
             elif c == '2': # SendMessage bitshift one of its operant.
                 self.op_imm(op, p >> 2)
             else:
@@ -397,7 +465,7 @@ class NsisProcessor(processor_t):
     def virt_pushpop(self, opcode, params):
         if params[1]:
             return self.itype_POP
-        elif params[1]:
+        elif params[2]:
             return self.itype_EXCH
         else:
             return self.itype_PUSH
@@ -534,9 +602,6 @@ class NsisProcessor(processor_t):
             idef(name='LockWindow', d='I', cf=CF_USE1), # 0x44
         ]
 
-        self.itable += [idef(name='Invalid'+hex(i))
-                            for i in range(len(self.itable),100)]
-
         self.itable += [
             idef(name='Push', d='S', cf=CF_USE1),
             idef(name='Pop', d='V', cf=CF_CHG1),
@@ -551,6 +616,7 @@ class NsisProcessor(processor_t):
             idef(name='FileWriteByte', d='VS', cf=CF_USE1|CF_USE2),
             idef(name='FileReadByte', d='VV', cf=CF_USE1|CF_CHG2),
             idef(name='LogSet', d='I', cf=CF_USE1),
+            idef(name='PluginCall', cf=CF_USE1|CF_USE2|CF_USE3),
         ]
 
         # Now create an instruction table compatible with IDA processor module requirements
