@@ -367,10 +367,10 @@ class NsisProcessor(processor_t):
             elif op.specval & self.FLa_StackArgs:
                 args = self.get_plugin_call_args(self.cmd, op)
                 for i, arg in enumerate(args):
-                    self.out_str(op, arg)
                     if i > 0:
                         out_symbol(',')
                         OutChar(' ')
+                    self.out_str(op, arg)
             else:
                 OutValue(op, OOFW_IMM | OOF_SIGNED)
         elif op.type == o_near:
