@@ -3,6 +3,8 @@
 # NRS
 ## NSIS Reversing Suite
 
+![nrs screenshot](http://i.imgur.com/0EQE6gu.png)
+
 ### Installation
 
 NRS is available through [Pypi](https://pypi.python.org/pypi/nrs) or this repositoy.
