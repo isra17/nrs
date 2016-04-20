@@ -10,12 +10,12 @@ bzlib = Extension('nrs.ext._bzlib', [
 ], depends=['nrs/ext/bzlib.h'])
 
 setup(name='nrs',
-      version='0.1',
+      version='0.1.4',
       description='NSIS Reversing Suite',
       author='isra17',
       author_email='isra017@gmail.com',
       url='https://github.com/isra17/nrs',
-      packages=['nrs','nrs.ext'],
+      packages=['nrs','nrs.ext', 'nrs.ida', 'nrs.strings'],
 
       install_requires=['future'],
       setup_requires=['pytest-runner'],
