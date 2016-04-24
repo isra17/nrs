@@ -3,6 +3,8 @@
 # NRS
 ## NSIS Reversing Suite
 
+NRS is a set of Python librairies used to unpack and analysis NSIS installer's data. It also feature an IDA plugin used to disassembly the NSIS Script of an installer.
+
 ![nrs screenshot](http://i.imgur.com/0EQE6gu.png)
 
 ### Installation
@@ -17,6 +19,7 @@ Change working directory to IDA root directory: `cd $IDA_DIR`
 To setup virtualenv: `virtualenv -p python2 venvi && source venv/bin/activate`.
 
 Install nrs from Pypi and build in 32 bits: `CFLAGS=-m32 LDFLAGS=-m32 pip install nrs`
+It can also be installed from the git repository: `CFLAGS=-m32 LDFLAGS=-m32 pip install -e $PATH_TO_LOCAL_REPO`
 
 Create symbolic links from NRS modules to IDA folders: `python -c 'import nrs.ida;nrs.ida.install()`. The `venv` folder must be in the IDA folder or you must pass the ida folder path to the `nrs.ida.install` function.
 
