@@ -15,8 +15,9 @@ lzma = Extension('nrs.ext.lzma._lzma', [
 ], depends=['nrs/ext/lzma/LZMADecode.h'])
 
 setup(name='nrs',
-      version='0.2.0',
+      version='0.2.2',
       description='NSIS Reversing Suite',
+      long_description_markdown_filename='README.md',
       author='isra17',
       author_email='isra017@gmail.com',
       url='https://github.com/isra17/nrs',
@@ -24,7 +25,7 @@ setup(name='nrs',
                 'nrs.strings'],
 
       install_requires=['future'],
-      setup_requires=['pytest-runner'],
+      setup_requires=['pytest-runner', 'setuptools-markdown'],
       tests_require=['pytest'],
       ext_modules=[bzlib, lzma]
     )

@@ -1,2 +1,3 @@
-include nrs/ext/bzlib.h
-include nrs/ext/config.h
+include nrs/ext/bzlib/bzlib.h
+include nrs/ext/bzlib/config.h
+include nrs/ext/lzma/LZMADecode.h
