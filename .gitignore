@@ -61,5 +61,7 @@ target/
 .ipynb_checkpoints
 
 .venv*
-nrs/ext/bzlib.py
-nrs/ext/bzlib_wrap.c
+nrs/ext/bzlib/bzlib.py
+nrs/ext/bzlib/bzlib_wrap.c
+nrs/ext/lzma/lzma.py
+nrs/ext/lzma/lzma_wrap.c

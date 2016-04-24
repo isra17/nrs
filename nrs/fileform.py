@@ -240,7 +240,9 @@ def _find_firstheader(nsis_file):
 
 def _is_lzma(data):
     def _is_lzma_header(data):
-        return data[0:3] == [0x5d, 0, 0] and data[5] == 0 and (data[6] & 0x80 == 0)
+        return data[0:3] == bytes([0x5d, 0, 0]) \
+                and data[5] == 0 \
+                and (data[6] & 0x80 == 0)
     return (_is_lzma_header(data) or (data[0] <= 1 and _is_lzma_header(data[1:])))
 
 def _is_bzip2(data):
@@ -252,10 +254,13 @@ def _zlib(f, size):
 
 def _bzip2(f, size):
     from nrs.ext import bzlib
-    data = f.read()
-    inflated_data = bytes(bzlib.decompress(data))
-    size, = struct.unpack_from('<I', inflated_data)
-    return inflated_data[4:size+4]
+    data = f.read(size)
+    return bytes(bzlib.decompress(data))
+
+def _lzma(f, size):
+    from nrs.ext import lzma
+    data = f.read(size)
+    return bytes(lzma.decompress(data))
 
 def inflate_header(nsis_file, data_offset):
     nsis_file.seek(data_offset)
@@ -265,19 +270,19 @@ def inflate_header(nsis_file, data_offset):
     decoder = None
 
     if _is_lzma(chunk):
-        raise NotImplemented('Solid LZMA')
+        decoder = _lzma
     elif chunk[3] == 0x80:
         solid = False
         if _is_lzma(chunk[4:]):
-            raise NotImplemented('Not-Solid LZMA')
+            decoder = _lzma
         elif _is_bzip2(chunk[4:]):
-            raise NotImplemented('Not-Solid Bzip2')
+            decoder = _bzip2
         else:
             decoder = _zlib
     elif _is_bzip2(chunk):
         decoder = _bzip2
     else:
-        raise NotImplemented('Solid Deflate')
+        decoder = _zlib
 
     if solid:
         deflated_data = nsis_file.seek(data_offset)
@@ -286,6 +291,9 @@ def inflate_header(nsis_file, data_offset):
         data_size &= 0x7fffffff
 
     inflated_data = decoder(nsis_file, data_size)
+    if solid:
+        data_size, = struct.unpack_from('<I', inflated_data)
+        inflated_data = inflated_data[4:data_size+4]
 
     return inflated_data, data_size
 

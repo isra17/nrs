@@ -38,11 +38,44 @@ def test_extract_blocks():
             pages_block = fileform._extract_block(nsis_file, firstheader, block_id)
             assert pages_block is not None
 
-def test_extract_bz2():
-    with open(os.path.join(utils.SAMPLES_DIR, 'bz2.exe'), 'rb') \
+def test_extract_bzip2():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example_bzip.exe'), 'rb') \
             as nsis_file:
         firstheader = fileform._find_firstheader(nsis_file)
         header = fileform._extract_header(nsis_file, firstheader)
-
         assert header is not None
 
+def test_extract_bzip2_solid():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example_bzip_solid.exe'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+        assert header is not None
+
+def test_extract_zlib():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example_zlib.exe'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+        assert header is not None
+
+def test_extract_zlib_solid():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example_zlib_solid.exe'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+        assert header is not None
+
+def test_extract_lzma():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example_lzma.exe'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+        assert header is not None
+
+def test_extract_lzma_solid():
+    with open(os.path.join(utils.SAMPLES_DIR, 'example_lzma_solid.exe'), 'rb') \
+            as nsis_file:
+        firstheader = fileform._find_firstheader(nsis_file)
+        header = fileform._extract_header(nsis_file, firstheader)
+        assert header is not None
