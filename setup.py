@@ -15,7 +15,7 @@ lzma = Extension('nrs.ext.lzma._lzma', [
 ], depends=['nrs/ext/lzma/LZMADecode.h'])
 
 setup(name='nrs',
-      version='0.1.4',
+      version='0.2.0',
       description='NSIS Reversing Suite',
       author='isra17',
       author_email='isra017@gmail.com',
