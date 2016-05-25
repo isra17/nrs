@@ -3,6 +3,8 @@ import ntpath
 import idaapi
 import struct
 import string
+import nrs.strings
+import nrs.fileform
 import nrs
 
 allowed_name_char = string.ascii_letters + string.digits + '$'

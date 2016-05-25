@@ -259,7 +259,7 @@ def _bzip2(f, size):
 
 def _lzma(f, size):
     from nrs.ext import lzma
-    data = f.read(size)
+    data = f.read()
     return bytes(lzma.decompress(data))
 
 def inflate_header(nsis_file, data_offset):
