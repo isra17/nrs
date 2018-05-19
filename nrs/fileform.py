@@ -253,9 +253,8 @@ def _zlib(f, size):
     return zlib.decompress(data, -zlib.MAX_WBITS)
 
 def _bzip2(f, size):
-    #from nrs.ext import bzlib
+    from nrs.ext import bzlib
     data = f.read(size)
-    import ipdb;ipdb.set_trace()
     return bytes(bzlib.decompress(data))
 
 def _lzma(f, size):
