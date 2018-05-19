@@ -63,5 +63,3 @@ target/
 .venv*
 nrs/ext/bzlib/bzlib.py
 nrs/ext/bzlib/bzlib_wrap.c
-nrs/ext/lzma/lzma.py
-nrs/ext/lzma/lzma_wrap.c

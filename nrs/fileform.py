@@ -253,14 +253,16 @@ def _zlib(f, size):
     return zlib.decompress(data, -zlib.MAX_WBITS)
 
 def _bzip2(f, size):
-    from nrs.ext import bzlib
+    #from nrs.ext import bzlib
     data = f.read(size)
+    import ipdb;ipdb.set_trace()
     return bytes(bzlib.decompress(data))
 
 def _lzma(f, size):
-    from nrs.ext import lzma
+    import lzma
     data = f.read()
-    return bytes(lzma.decompress(data))
+    props = lzma._decode_filter_properties(lzma.FILTER_LZMA1, data[0:5])
+    return lzma.decompress(data[5:], lzma.FORMAT_RAW, filters=[props])
 
 def inflate_header(nsis_file, data_offset):
     nsis_file.seek(data_offset)
