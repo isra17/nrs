@@ -252,8 +252,14 @@ Int32 NSISCALL BZ2_decompress ( DState* s )
             j++;
             if (j >= nGroups) RETURN(BZ_DATA_ERROR);
          }
-         s->selectorMtf[i] = j;
+         /* Having more than BZ_MAX_SELECTORS doesn't make much sense
+            since they will never be used, but some implementations might
+            "round up" the number of selectors, so just ignore those. */
+         if (i < BZ_MAX_SELECTORS)
+           s->selectorMtf[i] = j;
       }
+      if (nSelectors > BZ_MAX_SELECTORS)
+        nSelectors = BZ_MAX_SELECTORS;
 
       /*--- Undo the MTF values for the selectors. ---*/
       {
