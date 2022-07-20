@@ -266,11 +266,13 @@ typedef struct {
 /*-- Macros for decompression. --*/
 
 #define BZ_GET_FAST(cccc)                     \
+    if (s->tPos >= (UInt32)100000 * NSIS_COMPRESS_BZIP2_LEVEL) return True; \
     s->tPos = s->tt[s->tPos];                 \
     cccc = (UChar)(s->tPos & 0xff);           \
     s->tPos >>= 8;
 
 #define BZ_GET_FAST_C(cccc)                   \
+    if (c_tPos >= (UInt32)100000 * NSIS_COMPRESS_BZIP2_LEVEL) return True; \
     c_tPos = c_tt[c_tPos];                    \
     cccc = (UChar)(c_tPos & 0xff);            \
     c_tPos >>= 8;
@@ -296,6 +298,7 @@ typedef struct {
    (((UInt32)s->ll16[i]) | (GET_LL4(i) << 16))
 
 #define BZ_GET_SMALL(cccc)                            \
+      if (s->tPos >= (UInt32)100000 * NSIS_COMPRESS_BZIP2_LEVEL) return True; \
       cccc = BZ2_indexIntoF ( s->tPos, s->cftab );    \
       s->tPos = GET_LL(s->tPos);
 

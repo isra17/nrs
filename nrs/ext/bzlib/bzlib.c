@@ -115,7 +115,7 @@ Int32 NSISCALL BZ2_indexIntoF ( Int32 indx, Int32 *cftab )
 
 
 static
-void NSISCALL unRLE_obuf_to_output_SMALL ( DState* s )
+Bool NSISCALL unRLE_obuf_to_output_SMALL ( DState* s )
 {
    UChar k1;
   while (True) {
@@ -130,7 +130,11 @@ void NSISCALL unRLE_obuf_to_output_SMALL ( DState* s )
      }
 
      /* can a new run be started? */
-     if (s->nblock_used == s->save.nblock+1) return;
+     if (s->nblock_used == s->save.nblock+1) return False;
+
+     /* Only caused by corrupt data stream? */
+     if (s->nblock_used > s->save_nblock+1)
+         return True;
 
      s->state_out_len = 1;
      s->state_out_ch = s->k0;
@@ -154,7 +158,7 @@ void NSISCALL unRLE_obuf_to_output_SMALL ( DState* s )
   }
 }
 #else//!small, fast
-static void NSISCALL unRLE_obuf_to_output_FAST ( DState* s )
+static Bool NSISCALL unRLE_obuf_to_output_FAST ( DState* s )
 {
    UChar k1;
 
@@ -195,6 +199,10 @@ static void NSISCALL unRLE_obuf_to_output_FAST ( DState* s )
                cs_avail_out--;
             }
          }
+         /* Only caused by corrupt data stream? */
+         if (c_nblock_used > s_save_nblockPP)
+             return True;
+
          /* can a new run be started? */
          if (c_nblock_used == s_save_nblockPP) {
             c_state_out_len = 0; goto return_notr;
@@ -231,6 +239,7 @@ static void NSISCALL unRLE_obuf_to_output_FAST ( DState* s )
       s->next_out     = (unsigned char*) cs_next_out;
       s->avail_out    = cs_avail_out;
       /* end save */
+      return False;
 }
 
 #endif
@@ -239,14 +248,16 @@ static void NSISCALL unRLE_obuf_to_output_FAST ( DState* s )
 /*---------------------------------------------------*/
 int NSISCALL BZ2_bzDecompress( DState *s )
 {
+   Bool    corrupt;
    while (True) {
       if (s->state == BZ_X_IDLE) return BZ_SEQUENCE_ERROR;
       if (s->state == BZ_X_OUTPUT) {
 #ifdef NSIS_COMPRESS_BZIP2_SMALLMODE
-        unRLE_obuf_to_output_SMALL ( s );
+        corrupt = unRLE_obuf_to_output_SMALL ( s );
 #else
-        unRLE_obuf_to_output_FAST ( s );
+        corrupt = unRLE_obuf_to_output_FAST ( s );
 #endif
+         if (corrupt) return BZ_DATA_ERROR;
          if (s->nblock_used == s->save.nblock+1 && s->state_out_len == 0) {
             s->state = BZ_X_BLKHDR_1;
          } else {
