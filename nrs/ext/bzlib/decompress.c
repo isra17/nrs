@@ -1,14 +1,14 @@
 /*
  * This file is a part of the bzip2 compression module for NSIS.
- * 
+ *
  * Copyright and license information can be found below.
  * Modifications Copyright (C) 1999-2015 Nullsoft and Contributors
- * 
+ *
  * The original zlib source code is available at
  * http://www.bzip.org/
- * 
+ *
  * This modification is not compatible with the original bzip2.
- * 
+ *
  * This software is provided 'as-is', without any express or implied
  * warranty.
  *
@@ -252,8 +252,14 @@ Int32 NSISCALL BZ2_decompress ( DState* s )
             j++;
             if (j >= nGroups) RETURN(BZ_DATA_ERROR);
          }
-         s->selectorMtf[i] = j;
+         /* Having more than BZ_MAX_SELECTORS doesn't make much sense
+            since they will never be used, but some implementations might
+            "round up" the number of selectors, so just ignore those. */
+         if (i < BZ_MAX_SELECTORS)
+           s->selectorMtf[i] = j;
       }
+      if (nSelectors > BZ_MAX_SELECTORS)
+        nSelectors = BZ_MAX_SELECTORS;
 
       /*--- Undo the MTF values for the selectors. ---*/
       {
@@ -337,6 +343,13 @@ Int32 NSISCALL BZ2_decompress ( DState* s )
             N = 1;
             while (nextSym == BZ_RUNA || nextSym == BZ_RUNB)
             {
+               /* Check that N doesn't get too big, so that es doesn't
+               go negative.  The maximum value that can be
+               RUNA/RUNB encoded is equal to the block size (post
+               the initial RLE), viz, 900k, so bounding N at 2
+               million should guard against overflow without
+               rejecting any legitimate inputs. */
+               if (N >= 2*1024*1024) RETURN(BZ_DATA_ERROR);
                if (nextSym == BZ_RUNA) es += N;
                N = N << 1;
                if (nextSym == BZ_RUNB) es += N;
@@ -446,10 +459,28 @@ Int32 NSISCALL BZ2_decompress ( DState* s )
       s->state_out_ch  = 0;
       s->state = BZ_X_OUTPUT;
 
-      /*-- Set up cftab to facilitate generation of T^(-1) --*/
+      /* Check: unzftab entries in range. */
+      for (i = 0; i <= 255; i++) {
+         if (s->unzftab[i] < 0 || s->unzftab[i] > nblock)
+            RETURN(BZ_DATA_ERROR);
+      }
+      /* Actually generate cftab. */
       s->cftab[0] = 0;
+      /* Actually generate cftab. */
       for (i = 1; i <= 256; i++) s->cftab[i] = s->unzftab[i-1]+s->cftab[i-1];
-//      for (i = 1; i <= 256; i++) s->cftab[i] += s->cftab[i-1];
+      /* Check: cftab entries in range. */
+      for (i = 0; i <= 256; i++) {
+         if (s->cftab[i] < 0 || s->cftab[i] > nblock) {
+            /* s->cftab[i] can legitimately be == nblock */
+            RETURN(BZ_DATA_ERROR);
+         }
+      }
+      /* Check: cftab entries non-descending. */
+      for (i = 1; i <= 256; i++) {
+         if (s->cftab[i-1] > s->cftab[i]) {
+            RETURN(BZ_DATA_ERROR);
+         }
+      }
 
 #ifdef NSIS_COMPRESS_BZIP2_SMALLMODE
       {
