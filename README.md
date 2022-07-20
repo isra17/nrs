@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.org/isra17/nrs.svg?branch=master)](https://travis-ci.org/isra17/nrs)
-
 # NRS
 ## NSIS Reversing Suite
 
@@ -26,7 +24,7 @@ Create symbolic links from NRS modules to IDA folders: `python -c 'import nrs.id
 
 Open IDA and load any NSIS installer!
 
-If you have errors about `nrs` modules not found, ensure you run IDA from the Python venv. 
+If you have errors about `nrs` modules not found, ensure you run IDA from the Python venv.
 A simple way is simply to run it from command line with your virtualenv activated:
 ```
 $ source venv/bin/activate
