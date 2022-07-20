@@ -1,0 +1,26 @@
+name: Python package
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["2.7", "3.5", "3.9", "3.10"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y swig
+          python -m pip install --upgrade pip setuptools wheel
+          pip install pytest future
+          pip install -e .
+      - name: Test with pytest
+        run: |
+          python -m pytest -v
+      - name: Run on sample
+        run: |
+          ./nsisdump.py tests/samples/example1.exe
