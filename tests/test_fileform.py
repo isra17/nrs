@@ -1,6 +1,13 @@
 from nrs import fileform
 import os
+import pytest
 import utils
+
+try:
+    import lzma
+    has_lzma = True
+except ImportError:
+    has_lzma = False
 
 def test_findheader_not_found():
     # Header should not be found in non-nsisi files.
@@ -66,6 +73,7 @@ def test_extract_zlib_solid():
         header = fileform._extract_header(nsis_file, firstheader)
         assert header is not None
 
+@pytest.mark.skipif(not has_lzma, reason="no lzma support")
 def test_extract_lzma():
     with open(os.path.join(utils.SAMPLES_DIR, 'example_lzma.exe'), 'rb') \
             as nsis_file:
@@ -73,6 +81,7 @@ def test_extract_lzma():
         header = fileform._extract_header(nsis_file, firstheader)
         assert header is not None
 
+@pytest.mark.skipif(not has_lzma, reason="no lzma support")
 def test_extract_lzma_solid():
     with open(os.path.join(utils.SAMPLES_DIR, 'example_lzma_solid.exe'), 'rb') \
             as nsis_file:
