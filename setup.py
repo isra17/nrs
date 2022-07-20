@@ -10,7 +10,7 @@ bzlib = Extension('nrs.ext.bzlib._bzlib', [
 ], depends=['nrs/ext/bzlib/bzlib.h'])
 
 setup(name='nrs',
-      version='0.2.3',
+      version='0.2.4',
       description='NSIS Reversing Suite',
       author='isra17',
       author_email='isra017@gmail.com',
