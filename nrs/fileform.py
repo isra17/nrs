@@ -105,6 +105,11 @@ DEL_RECURSE = 2
 DEL_REBOOT = 4
 DEL_SIMPLE = 8
 
+# Decoder
+D_LZMA = 1
+D_BZIP2 = 2
+D_ZLIB = 3
+
 NSIS_MAX_STRLEN = 1024
 NSIS_MAX_INST_TYPES = 32
 
@@ -210,11 +215,12 @@ CtlColors32 = namedtuple('CtlColors32', [
 
 
 _firstheader_pack = struct.Struct("<II12sII")
-_header_pack = struct.Struct("<I64s20I{}s5I".format(4*(NSIS_MAX_INST_TYPES+1)))
+_header_pack = struct.Struct("<I64s10I10i{}sIIiii".format(4*(NSIS_MAX_INST_TYPES+1)))
 _blockheader_pack = struct.Struct("<II")
+_section_pack_unicode = struct.Struct("<6I{}s".format(NSIS_MAX_STRLEN*2))
 _section_pack = struct.Struct("<6I{}s".format(NSIS_MAX_STRLEN))
 _entry_pack = struct.Struct("<I{}s".format(MAX_ENTRY_OFFSETS*4))
-_page_pack = struct.Struct("<11I20s")
+_page_pack = struct.Struct("<2I9i20s")
 _ctlcolors32_pack = struct.Struct("<6I")
 
 def _find_firstheader(nsis_file):
@@ -271,19 +277,19 @@ def inflate_header(nsis_file, data_offset):
     decoder = None
 
     if _is_lzma(chunk):
-        decoder = _lzma
+        decoder = D_LZMA
     elif chunk[3] == 0x80:
         solid = False
         if _is_lzma(chunk[4:]):
-            decoder = _lzma
+            decoder = D_LZMA
         elif _is_bzip2(chunk[4:]):
-            decoder = _bzip2
+            decoder = D_BZIP2
         else:
-            decoder = _zlib
+            decoder = D_ZLIB
     elif _is_bzip2(chunk):
-        decoder = _bzip2
+        decoder = D_BZIP2
     else:
-        decoder = _zlib
+        decoder = D_ZLIB
 
     if solid:
         deflated_data = nsis_file.seek(data_offset)
@@ -291,16 +297,24 @@ def inflate_header(nsis_file, data_offset):
         nsis_file.seek(data_offset+4)
         data_size &= 0x7fffffff
 
-    inflated_data = decoder(nsis_file, data_size)
+    if decoder == D_LZMA:
+        inflated_data = _lzma(nsis_file, data_size)
+    elif decoder == D_BZIP2:
+        inflated_data = _bzip2(nsis_file, data_size)
+    else:
+        inflated_data = _zlib(nsis_file, data_size)
+
     if solid:
         data_size, = struct.unpack_from('<I', inflated_data)
         inflated_data = inflated_data[4:data_size+4]
 
-    return inflated_data, data_size
+    return inflated_data, data_size, decoder, solid
 
 def _extract_header(nsis_file, firstheader):
-    inflated_data, data_size = inflate_header(nsis_file, firstheader.data_offset)
+    inflated_data, data_size, decoder, solid = inflate_header(nsis_file, firstheader.data_offset)
     header = Header._make(_header_pack.unpack_from(inflated_data))
+    header.solid = solid
+    header.decoder = decoder
     firstheader.header = header
     firstheader._raw_header = bytes(inflated_data)
     firstheader._raw_header_c_size = data_size
@@ -316,7 +330,7 @@ def _extract_header(nsis_file, firstheader):
 
     # Parse the install types.
     header.install_types = [
-            struct.unpack_from('<I', header.raw_install_types[i:])[0]
+            struct.unpack_from('<i', header.raw_install_types[i:])[0]
                 for i in range(0, len(header.raw_install_types), 4)]
 
     return header
@@ -329,9 +343,10 @@ def _extract_block(nsis_file, firstheader, block_id):
 
     return firstheader._raw_header[header.blocks[block_id].offset:]
 
-def _parse_sections(block, n):
-    bsize = _section_pack.size
-    return [Section._make(_section_pack.unpack_from(block[i * bsize:]))
+def _parse_sections(block, n, unicode=False):
+    section_pack = _section_pack_unicode if unicode else _section_pack
+    bsize = section_pack.size
+    return [Section._make(section_pack.unpack_from(block[i * bsize:]))
                 for i in range(n)]
 
 def _parse_entries(block, n):
@@ -341,7 +356,7 @@ def _parse_entries(block, n):
         entry = Entry._make(_entry_pack.unpack_from(block[i * bsize:]))
         # Parse the install types.
         entry.offsets = [
-            struct.unpack_from('<I', entry.raw_offsets[j:])[0]
+            struct.unpack_from('<i', entry.raw_offsets[j:])[0]
                 for j in range(0, len(entry.raw_offsets), 4)]
         entries.append(entry)
 
@@ -354,9 +369,8 @@ def _parse_pages(block, n):
         page = Page._make(_page_pack.unpack_from(block[i * bsize:]))
         # Parse the install types.
         page.params = [
-            struct.unpack_from('<I', page.raw_params[j:])[0]
-                for j in range(0, len(page.raw_params), 4)]
+            struct.unpack_from('<i', page.raw_params[j:])[0]
+                for j in range(0, len(page.raw_params), 4)][::-1]
         pages.append(page)
 
     return pages
-
