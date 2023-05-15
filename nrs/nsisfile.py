@@ -136,13 +136,16 @@ class NSIS:
 
         self.header = fileform._extract_header(self.fd, self.firstheader)
 
+        self.header.unicode = self.block(NB_STRINGS)[0] == self.block(NB_STRINGS)[1] == 0
+
         self.pages = fileform._parse_pages(
                 self.block(NB_PAGES),
                 self.header.blocks[NB_PAGES].num)
 
         self.sections = fileform._parse_sections(
                 self.block(NB_SECTIONS),
-                self.header.blocks[NB_SECTIONS].num)
+                self.header.blocks[NB_SECTIONS].num,
+                self.header.unicode)
 
         self.entries = fileform._parse_entries(
                 self.block(NB_ENTRIES),
